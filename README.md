@@ -15,8 +15,8 @@ No global state library — state is managed with small hand-rolled store module
 ```bash
 cd frontend
 npm install
-cp .env.example .env      # set VITE_API_BASE_URL — see below
-npm run dev                # http://localhost:5173
+cp .env.example .env
+npm run dev
 ```
 
 With the backend running on `:8000` and `CORS_ALLOWED_ORIGINS=http://localhost:5173` set there, the SPA can call the API directly.
