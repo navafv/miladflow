@@ -1,0 +1,30 @@
+<svg width="256" height="266" viewBox="0 0 266 266" fill="none" xmlns="http://www.w3.org/2000/svg"
+    role="img" style="">
+    <title
+        style="fill:none;stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">Milad
+        Nabi management software logo, original abstract mark</title>
+    <desc
+        style="fill:none;stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">An
+        original abstract arch-and-flame shape formed from two interlocking curved forms, in a
+        teal-to-green gradient on a dark rounded square.</desc>
+    <defs>
+        <linearGradient id="brand-green3" x1="50" y1="210" x2="210" y2="50"
+            gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#02A56A" />
+            <stop offset="100%" stop-color="#21F1A8" />
+        </linearGradient>
+    </defs>
+
+    <rect width="256" height="256" rx="56" fill="#171717"
+        style="fill:rgb(23, 23, 23);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto" />
+
+    <path
+        d="M128 54&#10;C170 54 196 92 196 138&#10;C196 176 172 202 128 202&#10;C84 202 60 176 60 138&#10;C60 92 86 54 128 54 Z&#10;M128 78&#10;C96 78 84 108 84 138&#10;C84 166 100 178 128 178&#10;C156 178 172 166 172 138&#10;C172 108 160 78 128 78 Z"
+        fill="url(#brand-green3)" fill-rule="evenodd"
+        style="stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto" />
+
+    <path
+        d="M128 92&#10;C140 108 148 122 148 136&#10;C148 150 139 160 128 160&#10;C117 160 108 150 108 136&#10;C108 122 116 108 128 92 Z"
+        fill="url(#brand-green3)"
+        style="stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto" />
+</svg>

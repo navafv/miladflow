@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Authenticated admin dashboard and unattended TV display screens aren't
+# useful search results.
+Disallow: /admin
+Disallow: /*/tv
+
+Sitemap: https://miladflow.vercel.app/sitemap.xml

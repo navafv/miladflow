@@ -1,0 +1,42 @@
+export const recentResults = [
+  {
+    id: 1,
+    event: "Arabic Calligraphy",
+    category: "Senior",
+    winner: "Ayisha Fathima",
+    team: "Team Al-Ansar",
+    place: 1,
+  },
+  {
+    id: 2,
+    event: "Milad Speech (Malayalam)",
+    category: "Sub Junior",
+    winner: "Muhammed Rayyan",
+    team: "Team Badr",
+    place: 1,
+  },
+  {
+    id: 3,
+    event: "Group Madh Chorus",
+    category: "General",
+    winner: "Team Al-Ansar",
+    team: "Team Al-Ansar",
+    place: 1,
+  },
+  {
+    id: 4,
+    event: "Quiz — Seerah",
+    category: "Senior",
+    winner: "Fathima Zahra",
+    team: "Team Uhud",
+    place: 1,
+  },
+  {
+    id: 5,
+    event: "Qasida Recitation",
+    category: "Junior",
+    winner: "Ibrahim Sadiq",
+    team: "Team Badr",
+    place: 1,
+  },
+];
