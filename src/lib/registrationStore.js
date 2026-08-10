@@ -54,9 +54,7 @@ export async function loadEventRoster(eventId) {
   });
 
   try {
-    const result = await apiClient.get(
-      `/registrations/?event=${eventId}&page_size=500`,
-    );
+    const result = await apiClient.get(`/registrations/?event=${eventId}`);
     const rows = Array.isArray(result) ? result : (result?.results ?? []);
 
     const next = new Map();
