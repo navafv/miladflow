@@ -81,6 +81,32 @@ export async function loadEventRoster(eventId) {
   }
 }
 
+async function reconcileStudent(studentId, eventId) {
+  try {
+    const result = await apiClient.get(
+      `/registrations/?event=${eventId}&student=${studentId}`,
+    );
+    const rows = Array.isArray(result) ? result : (result?.results ?? []);
+    if (currentEventId !== eventId) return;
+    if (rows.length > 0) {
+      patchStudent(studentId, {
+        status: "registered",
+        registrationId: rows[0].id,
+        error: null,
+      });
+    } else {
+      removeStudent(studentId);
+    }
+  } catch {
+    if (currentEventId === eventId) {
+      patchStudent(studentId, {
+        status: "error",
+        error: "Couldn't confirm registration status — please refresh.",
+      });
+    }
+  }
+}
+
 export async function registerStudent(studentId, eventId) {
   patchStudent(studentId, { status: "saving", error: null });
 
@@ -96,8 +122,15 @@ export async function registerStudent(studentId, eventId) {
       typeof err.data === "object" &&
       ("rejected" in err.data || "created" in err.data);
     if (!hasBucketShape) {
-      if (currentEventId === eventId) removeStudent(studentId);
-      throw err;
+      await reconcileStudent(studentId, eventId);
+      const entry = byStudentId.get(studentId);
+      if (entry?.status === "registered") return { ok: true };
+      return {
+        ok: false,
+        error:
+          err.message ??
+          "Could not confirm this registration — please check and retry.",
+      };
     }
     response = err.data;
   }
@@ -185,10 +218,26 @@ export async function registerStudentsBulk(studentIds, eventId) {
       typeof err.data === "object" &&
       ("rejected" in err.data || "created" in err.data);
     if (!hasBucketShape) {
-      if (currentEventId === eventId) {
-        idsToRegister.forEach((id) => removeStudent(id));
-      }
-      throw err;
+      const refreshed =
+        currentEventId === eventId
+          ? await loadEventRoster(eventId).catch(() => null)
+          : null;
+      const registeredIds = [];
+      const failures = [];
+      idsToRegister.forEach((id) => {
+        if (refreshed?.get(id)) {
+          registeredIds.push(id);
+        } else {
+          if (currentEventId === eventId) removeStudent(id);
+          failures.push({
+            studentId: id,
+            error:
+              err.message ??
+              "Could not confirm this registration — please check and retry.",
+          });
+        }
+      });
+      return { registeredIds, failures };
     }
     response = err.data;
   }

@@ -137,31 +137,6 @@ export default function RegistrationsViewPage() {
     return { exportColumns: columns, exportRows: rows };
   }, [matrix]);
 
-  const exportSubtitle = useMemo(() => {
-    if (!filtersReady) return undefined;
-    const categoryName =
-      categories.find((c) => String(c.id) === String(categoryFilter))?.name ??
-      categoryFilter;
-    const genderLabel =
-      GENDER_OPTIONS.find((g) => g.value === genderFilter)?.label ??
-      genderFilter;
-    const parts = [`Category: ${categoryName}`, `Gender: ${genderLabel}`];
-    if (teamFilter !== ALL) {
-      const teamName =
-        teams.find((t) => String(t.id) === String(teamFilter))?.name ??
-        teamFilter;
-      parts.push(`Team: ${teamName}`);
-    }
-    return parts.join("  ·  ");
-  }, [
-    filtersReady,
-    categories,
-    categoryFilter,
-    genderFilter,
-    teamFilter,
-    teams,
-  ]);
-
   const exportFilterLabels = useMemo(() => {
     if (!filtersReady) return [];
     const categoryName =
@@ -176,6 +151,34 @@ export default function RegistrationsViewPage() {
           teamFilter)
         : null;
     return [categoryName, genderLabel, teamName];
+  }, [
+    filtersReady,
+    categories,
+    categoryFilter,
+    genderFilter,
+    teamFilter,
+    teams,
+  ]);
+
+  const exportFilterSummaryParts = useMemo(() => {
+    if (!filtersReady) return [];
+    const categoryName =
+      categories.find((c) => String(c.id) === String(categoryFilter))?.name ??
+      categoryFilter;
+    const genderLabel =
+      GENDER_OPTIONS.find((g) => g.value === genderFilter)?.label ??
+      genderFilter;
+    const parts = [
+      { label: "Category", value: categoryName },
+      { label: "Gender", value: genderLabel },
+    ];
+    if (teamFilter !== ALL) {
+      const teamName =
+        teams.find((t) => String(t.id) === String(teamFilter))?.name ??
+        teamFilter;
+      parts.push({ label: "Team", value: teamName });
+    }
+    return parts;
   }, [
     filtersReady,
     categories,
@@ -232,9 +235,9 @@ export default function RegistrationsViewPage() {
               rows={exportRows}
               filename="Registrations"
               filterLabels={exportFilterLabels}
+              filterSummaryParts={exportFilterSummaryParts}
               allLabel="All_Students"
-              title="Event Registration Report"
-              subtitle={exportSubtitle}
+              title="Registrations Report"
               orgName={orgName}
             />
           ) : null

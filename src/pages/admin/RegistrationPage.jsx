@@ -195,19 +195,26 @@ export default function RegistrationPage() {
     if (!selectedEvent) return;
     const entry = byStudentId.get(student.id);
 
-    if (!entry || entry.status === "error") {
-      const result = await registerStudent(student.id, selectedEvent.id);
-      if (!result.ok) showToast(`${student.name}: ${result.error}`, "error");
-      return;
-    }
-    if (entry.status === "registered") {
-      const result = await unregisterStudent(
-        student.id,
-        entry.registrationId,
-        selectedEvent.id,
+    try {
+      if (!entry || entry.status === "error") {
+        const result = await registerStudent(student.id, selectedEvent.id);
+        if (!result.ok) showToast(`${student.name}: ${result.error}`, "error");
+        return;
+      }
+      if (entry.status === "registered") {
+        const result = await unregisterStudent(
+          student.id,
+          entry.registrationId,
+          selectedEvent.id,
+        );
+        if (!result.ok) showToast(`${student.name}: ${result.error}`, "error");
+        return;
+      }
+    } catch (err) {
+      showToast(
+        `${student.name}: ${err.message ?? "Something went wrong — please retry."}`,
+        "error",
       );
-      if (!result.ok) showToast(`${student.name}: ${result.error}`, "error");
-      return;
     }
   };
 

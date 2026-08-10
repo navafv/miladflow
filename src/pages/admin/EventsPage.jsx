@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useApiResource } from "../../lib/useApiResource.js";
 import { useDebounce } from "../../lib/useDebounce.js";
 import { ApiError } from "../../lib/apiClient.js";
+import { useAuth } from "../../lib/authStore.js";
 import ExportButtons from "../../components/admin/ExportButtons.jsx";
 import Modal from "../../components/admin/Modal.jsx";
 import {
@@ -67,6 +68,8 @@ const emptyForm = {
 };
 
 export default function EventsPage() {
+  const { me } = useAuth();
+  const orgName = me?.madrassa?.name ?? null;
   const [filters, setFilters] = useState(defaultFilters);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 500);
@@ -232,8 +235,9 @@ export default function EventsPage() {
               rows={exportRows}
               filename="Events"
               filterLabels={[
-                categories.find((c) => String(c.id) === String(filters.category))
-                  ?.name,
+                categories.find(
+                  (c) => String(c.id) === String(filters.category),
+                )?.name,
                 filters.gender !== ALL ? filters.gender : null,
                 eventTypeFilterOptions.find(
                   (o) => o.value === filters.event_type,
@@ -241,7 +245,33 @@ export default function EventsPage() {
                 stageFilterOptions.find((o) => o.value === filters.is_stage)
                   ?.label,
               ]}
+              filterSummaryParts={[
+                {
+                  label: "Category",
+                  value: categories.find(
+                    (c) => String(c.id) === String(filters.category),
+                  )?.name,
+                },
+                {
+                  label: "Gender",
+                  value: filters.gender !== ALL ? filters.gender : null,
+                },
+                {
+                  label: "Type",
+                  value: eventTypeFilterOptions.find(
+                    (o) => o.value === filters.event_type,
+                  )?.label,
+                },
+                {
+                  label: "Stage",
+                  value: stageFilterOptions.find(
+                    (o) => o.value === filters.is_stage,
+                  )?.label,
+                },
+              ]}
               allLabel="All_Events"
+              title="Events Report"
+              orgName={orgName}
             />
             <AddButton onClick={openAdd} label="Add event" />
           </>

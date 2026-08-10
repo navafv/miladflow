@@ -4,7 +4,9 @@ import jsPDF from "jspdf";
 import { toCanvas } from "html-to-image";
 import {
   MALAYALAM_FONT_FAMILY,
+  PDF_FONT_NAME,
   ensureMalayalamFontFace,
+  registerMalayalamPdfFont,
 } from "../../lib/pdfFonts.js";
 import { buildExportFilename } from "../../lib/exportFilename.js";
 
@@ -46,65 +48,92 @@ const FOOTER_SPACE_PT = 26;
 const INK = [23, 23, 23];
 const MUTED = [110, 118, 128];
 const RULE = [210, 216, 222];
+const BRAND = [16, 145, 105];
 
-function formatGeneratedAt(date) {
-  return date.toLocaleString(undefined, {
+/** "10 Aug 2026" — used in the footer timestamp. */
+function formatGeneratedDate(date) {
+  return date.toLocaleDateString(undefined, {
     day: "numeric",
     month: "short",
     year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
   });
 }
 
-function drawLetterhead(doc, { orgName, title, subtitle }, generatedAt) {
+/**
+ * Joins active filter values into a single "Category: Kiddies  |  Gender:
+ * Boys  |  Event: Quran Recitation" line. Accepts either:
+ *  - { label, value } objects (preferred — renders "Label: Value"), or
+ *  - plain strings (rendered as-is, for callers that already have a
+ *    formatted summary).
+ * Falsy entries and objects with an empty value are dropped automatically.
+ */
+export function buildFilterSummary(filterParts = []) {
+  return (filterParts ?? [])
+    .filter(Boolean)
+    .map((part) => {
+      if (typeof part === "string") return part.trim();
+      const { label, value } = part;
+      if (value === null || value === undefined || value === "") return "";
+      return label ? `${label}: ${value}` : String(value);
+    })
+    .filter((part) => part.length > 0)
+    .join("   |   ");
+}
+
+/**
+ * Premium letterhead:
+ *   Madrassa Name         (large, bold, centered, brand color)
+ *   Document Title         (medium, bold, centered)
+ *   Active filter summary  (small, muted, centered) — only if present
+ *   ── rule ──
+ * Every piece of text goes through the registered Noto Sans Malayalam font
+ * (see registerMalayalamPdfFont), so Malayalam org names, titles, or filter
+ * values render correctly instead of as blank boxes.
+ */
+function drawLetterhead(doc, { orgName, title, filterSummary }) {
   const pageWidth = doc.internal.pageSize.getWidth();
+  const centerX = pageWidth / 2;
   let y = PDF_MARGIN_PT;
 
   if (orgName) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    doc.setTextColor(...INK);
-    doc.text(orgName, PDF_MARGIN_PT, y + 12);
-    y += 20;
+    doc.setFont(PDF_FONT_NAME, "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(...BRAND);
+    doc.text(orgName, centerX, y + 14, { align: "center" });
+    y += 22;
   }
 
   if (title) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
+    doc.setFont(PDF_FONT_NAME, "bold");
+    doc.setFontSize(12.5);
     doc.setTextColor(...INK);
-    doc.text(title, PDF_MARGIN_PT, y + 10);
-    y += 16;
+    doc.text(title, centerX, y + 10, { align: "center" });
+    y += 17;
   }
 
-  if (subtitle) {
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
+  if (filterSummary) {
+    doc.setFont(PDF_FONT_NAME, "normal");
+    doc.setFontSize(9.5);
     doc.setTextColor(...MUTED);
-    doc.text(subtitle, PDF_MARGIN_PT, y + 9);
-    y += 14;
+    doc.text(filterSummary, centerX, y + 9, { align: "center" });
+    y += 15;
   }
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(...MUTED);
-  doc.text(
-    `Generated on ${formatGeneratedAt(generatedAt)}`,
-    pageWidth - PDF_MARGIN_PT,
-    PDF_MARGIN_PT + 12,
-    { align: "right" },
-  );
-
-  y += 8;
+  y += 6;
   doc.setDrawColor(...RULE);
   doc.setLineWidth(1);
   doc.line(PDF_MARGIN_PT, y, pageWidth - PDF_MARGIN_PT, y);
-  y += 12;
+  y += 14;
 
   return y;
 }
 
-function drawFooter(doc, orgName, pageIndex, totalPages) {
+/**
+ * Professional footer: "Generated on: 10 Aug 2026" on the left, "Page 1 of
+ * 3" on the right, above a thin rule. Drawn once per page after all pages
+ * exist so the total page count is known.
+ */
+function drawFooter(doc, generatedAt, pageIndex, totalPages) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const ruleY = pageHeight - PDF_MARGIN_PT - 12;
@@ -113,12 +142,14 @@ function drawFooter(doc, orgName, pageIndex, totalPages) {
   doc.setLineWidth(0.75);
   doc.line(PDF_MARGIN_PT, ruleY, pageWidth - PDF_MARGIN_PT, ruleY);
 
-  doc.setFont("helvetica", "normal");
+  doc.setFont(PDF_FONT_NAME, "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(...MUTED);
-  if (orgName) {
-    doc.text(orgName, PDF_MARGIN_PT, ruleY + 12);
-  }
+  doc.text(
+    `Generated on: ${formatGeneratedDate(generatedAt)}`,
+    PDF_MARGIN_PT,
+    ruleY + 12,
+  );
   doc.text(
     `Page ${pageIndex + 1} of ${totalPages}`,
     pageWidth - PDF_MARGIN_PT,
@@ -184,7 +215,7 @@ function buildExportTableNode({ columns, rows }) {
 
 async function exportTableToPdf(
   { container, table, theadEl, rowEls },
-  { orgName, title, subtitle },
+  { orgName, title, filterSummary },
   filename,
 ) {
   document.body.appendChild(container);
@@ -219,16 +250,14 @@ async function exportTableToPdf(
 
     const generatedAt = new Date();
     const doc = new jsPDF({ unit: "pt", format: "a4" });
+    await registerMalayalamPdfFont(doc);
+
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const usableWidthPt = pageWidth - PDF_MARGIN_PT * 2;
     const scale = usableWidthPt / canvas.width;
 
-    const contentTopPt = drawLetterhead(
-      doc,
-      { orgName, title, subtitle },
-      generatedAt,
-    );
+    const contentTopPt = drawLetterhead(doc, { orgName, title, filterSummary });
     const page1UsableHeightPt =
       pageHeight - PDF_MARGIN_PT - FOOTER_SPACE_PT - contentTopPt;
     const laterPageUsableHeightPt =
@@ -305,7 +334,7 @@ async function exportTableToPdf(
       if (pageIndex > 0) {
         doc.addPage();
         if (title) {
-          doc.setFont("helvetica", "bold");
+          doc.setFont(PDF_FONT_NAME, "bold");
           doc.setFontSize(10.5);
           doc.setTextColor(...MUTED);
           doc.text(title, PDF_MARGIN_PT, PDF_MARGIN_PT + 8);
@@ -326,7 +355,7 @@ async function exportTableToPdf(
     const totalPages = pages.length;
     for (let i = 0; i < totalPages; i += 1) {
       doc.setPage(i + 1);
-      drawFooter(doc, orgName, i, totalPages);
+      drawFooter(doc, generatedAt, i, totalPages);
     }
 
     doc.save(`${filename}.pdf`);
@@ -340,6 +369,7 @@ export default function ExportButtons({
   rows,
   filename = "export",
   filterLabels = [],
+  filterSummaryParts,
   allLabel = "All",
   title,
   subtitle,
@@ -354,6 +384,11 @@ export default function ExportButtons({
       filters: filterLabels,
       allLabel,
     });
+
+  const resolveFilterSummary = () =>
+    filterSummaryParts?.length
+      ? buildFilterSummary(filterSummaryParts)
+      : (subtitle ?? "");
 
   const handleExcel = () => {
     const dynamicFilename = buildFilename();
@@ -377,7 +412,11 @@ export default function ExportButtons({
       const built = buildExportTableNode({ columns, rows });
       await exportTableToPdf(
         built,
-        { orgName, title: title ?? filename.replace(/-/g, " "), subtitle },
+        {
+          orgName,
+          title: title ?? filename.replace(/-/g, " "),
+          filterSummary: resolveFilterSummary(),
+        },
         dynamicFilename,
       );
     } catch (err) {

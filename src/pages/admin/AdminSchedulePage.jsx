@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useApiResource } from "../../lib/useApiResource.js";
 import { apiClient, ApiError } from "../../lib/apiClient.js";
+import { useAuth } from "../../lib/authStore.js";
 import ExportButtons from "../../components/admin/ExportButtons.jsx";
 import Modal from "../../components/admin/Modal.jsx";
 import StatusBadge from "../../components/StatusBadge.jsx";
@@ -93,6 +94,8 @@ function ControlButton({ label, onClick, disabled, tone }) {
 }
 
 export default function AdminSchedulePage() {
+  const { me } = useAuth();
+  const orgName = me?.madrassa?.name ?? null;
   const [statusFilter, setStatusFilter] = useState(ALL);
   const [eventFilter, setEventFilter] = useState(ALL);
 
@@ -280,7 +283,21 @@ export default function AdminSchedulePage() {
                 events.find((ev) => String(ev.id) === String(eventFilter))
                   ?.name,
               ]}
+              filterSummaryParts={[
+                {
+                  label: "Status",
+                  value: statusFilter !== ALL ? statusFilter : null,
+                },
+                {
+                  label: "Event",
+                  value: events.find(
+                    (ev) => String(ev.id) === String(eventFilter),
+                  )?.name,
+                },
+              ]}
               allLabel="Full_Schedule"
+              title="Live Schedule Report"
+              orgName={orgName}
             />
             <AddButton onClick={openAdd} label="Add schedule item" />
           </>

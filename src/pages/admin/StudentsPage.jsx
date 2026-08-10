@@ -533,7 +533,26 @@ export default function StudentsPage() {
                 teams.find((t) => String(t.id) === String(filters.team))?.name,
                 filters.gender !== ALL ? filters.gender : null,
               ]}
+              filterSummaryParts={[
+                {
+                  label: "Category",
+                  value: categories.find(
+                    (c) => String(c.id) === String(filters.category),
+                  )?.name,
+                },
+                {
+                  label: "Team",
+                  value: teams.find((t) => String(t.id) === String(filters.team))
+                    ?.name,
+                },
+                {
+                  label: "Gender",
+                  value: filters.gender !== ALL ? filters.gender : null,
+                },
+              ]}
               allLabel="All_Students"
+              title="Students Report"
+              orgName={madrassaProfile.name}
             />
             <button
               onClick={() => setIdCardSetupOpen(true)}
