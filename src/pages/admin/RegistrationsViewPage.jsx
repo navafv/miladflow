@@ -162,6 +162,29 @@ export default function RegistrationsViewPage() {
     teams,
   ]);
 
+  const exportFilterLabels = useMemo(() => {
+    if (!filtersReady) return [];
+    const categoryName =
+      categories.find((c) => String(c.id) === String(categoryFilter))?.name ??
+      categoryFilter;
+    const genderLabel =
+      GENDER_OPTIONS.find((g) => g.value === genderFilter)?.label ??
+      genderFilter;
+    const teamName =
+      teamFilter !== ALL
+        ? (teams.find((t) => String(t.id) === String(teamFilter))?.name ??
+          teamFilter)
+        : null;
+    return [categoryName, genderLabel, teamName];
+  }, [
+    filtersReady,
+    categories,
+    categoryFilter,
+    genderFilter,
+    teamFilter,
+    teams,
+  ]);
+
   const [auditRows, setAuditRows] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState(null);
@@ -207,7 +230,9 @@ export default function RegistrationsViewPage() {
             <ExportButtons
               columns={exportColumns}
               rows={exportRows}
-              filename="registrations-matrix"
+              filename="Registrations"
+              filterLabels={exportFilterLabels}
+              allLabel="All_Students"
               title="Event Registration Report"
               subtitle={exportSubtitle}
               orgName={orgName}

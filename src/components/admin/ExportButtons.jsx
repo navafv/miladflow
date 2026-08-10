@@ -6,6 +6,7 @@ import {
   MALAYALAM_FONT_FAMILY,
   ensureMalayalamFontFace,
 } from "../../lib/pdfFonts.js";
+import { buildExportFilename } from "../../lib/exportFilename.js";
 
 function DownloadIcon() {
   return (
@@ -338,6 +339,8 @@ export default function ExportButtons({
   columns,
   rows,
   filename = "export",
+  filterLabels = [],
+  allLabel = "All",
   title,
   subtitle,
   orgName,
@@ -345,7 +348,15 @@ export default function ExportButtons({
   const [pdfExporting, setPdfExporting] = useState(false);
   const [pdfError, setPdfError] = useState(null);
 
+  const buildFilename = () =>
+    buildExportFilename({
+      baseName: filename,
+      filters: filterLabels,
+      allLabel,
+    });
+
   const handleExcel = () => {
+    const dynamicFilename = buildFilename();
     const data = rows.map((row) =>
       Object.fromEntries(
         columns.map((c) => [c.label, sanitizeCell(row[c.key])]),
@@ -354,19 +365,20 @@ export default function ExportButtons({
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
-    XLSX.writeFile(workbook, `${filename}.xlsx`);
+    XLSX.writeFile(workbook, `${dynamicFilename}.xlsx`);
   };
 
   const handlePdf = async () => {
     setPdfError(null);
     setPdfExporting(true);
     try {
+      const dynamicFilename = buildFilename();
       await ensureMalayalamFontFace();
       const built = buildExportTableNode({ columns, rows });
       await exportTableToPdf(
         built,
         { orgName, title: title ?? filename.replace(/-/g, " "), subtitle },
-        filename,
+        dynamicFilename,
       );
     } catch (err) {
       setPdfError(

@@ -274,7 +274,13 @@ export default function AdminSchedulePage() {
             <ExportButtons
               columns={exportColumns}
               rows={exportRows}
-              filename="festival-schedule"
+              filename="Schedule"
+              filterLabels={[
+                statusFilter !== ALL ? statusFilter : null,
+                events.find((ev) => String(ev.id) === String(eventFilter))
+                  ?.name,
+              ]}
+              allLabel="Full_Schedule"
             />
             <AddButton onClick={openAdd} label="Add schedule item" />
           </>

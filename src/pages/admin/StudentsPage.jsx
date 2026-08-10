@@ -526,7 +526,14 @@ export default function StudentsPage() {
             <ExportButtons
               columns={exportColumns}
               rows={exportRows}
-              filename="students"
+              filename="Students"
+              filterLabels={[
+                categories.find((c) => String(c.id) === String(filters.category))
+                  ?.name,
+                teams.find((t) => String(t.id) === String(filters.team))?.name,
+                filters.gender !== ALL ? filters.gender : null,
+              ]}
+              allLabel="All_Students"
             />
             <button
               onClick={() => setIdCardSetupOpen(true)}

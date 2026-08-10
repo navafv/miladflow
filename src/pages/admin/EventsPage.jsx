@@ -230,7 +230,18 @@ export default function EventsPage() {
             <ExportButtons
               columns={exportColumns}
               rows={exportRows}
-              filename="events"
+              filename="Events"
+              filterLabels={[
+                categories.find((c) => String(c.id) === String(filters.category))
+                  ?.name,
+                filters.gender !== ALL ? filters.gender : null,
+                eventTypeFilterOptions.find(
+                  (o) => o.value === filters.event_type,
+                )?.label,
+                stageFilterOptions.find((o) => o.value === filters.is_stage)
+                  ?.label,
+              ]}
+              allLabel="All_Events"
             />
             <AddButton onClick={openAdd} label="Add event" />
           </>
