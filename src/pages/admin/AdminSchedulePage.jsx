@@ -24,6 +24,7 @@ import { Toast, useToast } from "../../components/admin/Toast.jsx";
 const emptyForm = {
   source: "competition",
   category_id: "",
+  gender: "",
   event_id: "",
   name: "",
   venue_id: "",
@@ -31,6 +32,14 @@ const emptyForm = {
   scheduled_time_of_day: "",
   round_label: "",
 };
+
+const GENDER_OPTIONS = ["boys", "girls", "mixed"];
+
+function genderLabel(value) {
+  if (!value) return "—";
+  if (value === "mixed") return "Mixed";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
 
 function toIsoDatetime(dateValue, timeValue) {
   if (!dateValue || !timeValue) return null;
@@ -66,6 +75,9 @@ function eventCategoryId(ev) {
 }
 function eventCategoryName(ev) {
   return ev?.category?.name ?? ev?.category_name ?? "";
+}
+function eventGender(ev) {
+  return ev?.gender ?? "";
 }
 
 const ALL = "All";
@@ -106,6 +118,7 @@ export default function AdminSchedulePage() {
   const orgName = me?.madrassa?.name ?? null;
   const [statusFilter, setStatusFilter] = useState(ALL);
   const [categoryFilter, setCategoryFilter] = useState(ALL);
+  const [genderFilter, setGenderFilter] = useState(ALL);
   const [eventFilter, setEventFilter] = useState(ALL);
 
   const {
@@ -130,20 +143,37 @@ export default function AdminSchedulePage() {
   const { data: venues, loading: venuesLoading } = useApiResource("/venues/");
 
   const eventsForCategoryFilter = useMemo(() => {
-    if (categoryFilter === ALL) return events;
-    return events.filter(
-      (ev) => String(eventCategoryId(ev)) === String(categoryFilter),
-    );
-  }, [events, categoryFilter]);
+    return events.filter((ev) => {
+      const matchesCategory =
+        categoryFilter === ALL ||
+        String(eventCategoryId(ev)) === String(categoryFilter);
+      const matchesGender =
+        genderFilter === ALL || eventGender(ev) === genderFilter;
+      return matchesCategory && matchesGender;
+    });
+  }, [events, categoryFilter, genderFilter]);
 
   const handleCategoryFilterChange = (value) => {
     setCategoryFilter(value);
-    if (value === ALL) return;
-    const stillValid = events.some(
-      (ev) =>
-        String(ev.id) === String(eventFilter) &&
-        String(eventCategoryId(ev)) === String(value),
-    );
+    resetEventFilterIfInvalid(value, genderFilter);
+  };
+
+  const handleGenderFilterChange = (value) => {
+    setGenderFilter(value);
+    resetEventFilterIfInvalid(categoryFilter, value);
+  };
+
+  const resetEventFilterIfInvalid = (nextCategory, nextGender) => {
+    if (eventFilter === ALL) return;
+    const stillValid = events.some((ev) => {
+      if (String(ev.id) !== String(eventFilter)) return false;
+      const matchesCategory =
+        nextCategory === ALL ||
+        String(eventCategoryId(ev)) === String(nextCategory);
+      const matchesGender =
+        nextGender === ALL || eventGender(ev) === nextGender;
+      return matchesCategory && matchesGender;
+    });
     if (!stillValid) setEventFilter(ALL);
   };
 
@@ -156,21 +186,28 @@ export default function AdminSchedulePage() {
 
   const eventsForForm = useMemo(() => {
     if (!form.category_id) return [];
-    return events.filter(
-      (ev) => String(eventCategoryId(ev)) === String(form.category_id),
-    );
-  }, [events, form.category_id]);
+    return events.filter((ev) => {
+      const matchesCategory =
+        String(eventCategoryId(ev)) === String(form.category_id);
+      const matchesGender = !form.gender || eventGender(ev) === form.gender;
+      return matchesCategory && matchesGender;
+    });
+  }, [events, form.category_id, form.gender]);
 
   const openAdd = () => {
     setEditingId(null);
     const firstCategoryId =
       categoryFilter !== ALL ? categoryFilter : (categories[0]?.id ?? "");
+    const firstGender = genderFilter !== ALL ? genderFilter : "";
     const firstEvent = events.find(
-      (ev) => String(eventCategoryId(ev)) === String(firstCategoryId),
+      (ev) =>
+        String(eventCategoryId(ev)) === String(firstCategoryId) &&
+        (!firstGender || eventGender(ev) === firstGender),
     );
     setForm({
       ...emptyForm,
       category_id: firstCategoryId,
+      gender: firstGender,
       event_id: firstEvent?.id ?? "",
       venue_id: venues[0]?.id ?? "",
     });
@@ -187,6 +224,7 @@ export default function AdminSchedulePage() {
       category_id: isCompetition
         ? String(eventCategoryId(item.event) ?? "")
         : "",
+      gender: isCompetition ? eventGender(item.event) : "",
       event_id: item.event?.id ?? "",
       name: isCompetition ? "" : (item.name ?? ""),
       venue_id: item.venue?.id ?? "",
@@ -208,11 +246,26 @@ export default function AdminSchedulePage() {
 
   const handleCategoryChange = (categoryId) => {
     const firstMatch = events.find(
-      (ev) => String(eventCategoryId(ev)) === String(categoryId),
+      (ev) =>
+        String(eventCategoryId(ev)) === String(categoryId) &&
+        (!form.gender || eventGender(ev) === form.gender),
     );
     setForm((f) => ({
       ...f,
       category_id: categoryId,
+      event_id: firstMatch?.id ?? "",
+    }));
+  };
+
+  const handleGenderChange = (gender) => {
+    const firstMatch = events.find(
+      (ev) =>
+        String(eventCategoryId(ev)) === String(form.category_id) &&
+        (!gender || eventGender(ev) === gender),
+    );
+    setForm((f) => ({
+      ...f,
+      gender,
       event_id: firstMatch?.id ?? "",
     }));
   };
@@ -256,7 +309,7 @@ export default function AdminSchedulePage() {
       !eventsForForm.some((ev) => String(ev.id) === String(form.event_id))
     ) {
       setFormError(
-        "That event doesn't belong to the selected category. Please re-select.",
+        "That event doesn't match the selected category/gender. Please re-select.",
       );
       return;
     }
@@ -323,18 +376,22 @@ export default function AdminSchedulePage() {
   };
 
   const visibleScheduleItems = useMemo(() => {
-    if (categoryFilter === ALL) return scheduleItems;
-    return scheduleItems.filter(
-      (item) =>
-        !item.event ||
-        String(eventCategoryId(item.event)) === String(categoryFilter),
-    );
-  }, [scheduleItems, categoryFilter]);
+    return scheduleItems.filter((item) => {
+      if (!item.event) return true;
+      const matchesCategory =
+        categoryFilter === ALL ||
+        String(eventCategoryId(item.event)) === String(categoryFilter);
+      const matchesGender =
+        genderFilter === ALL || eventGender(item.event) === genderFilter;
+      return matchesCategory && matchesGender;
+    });
+  }, [scheduleItems, categoryFilter, genderFilter]);
 
   const exportColumns = [
     { key: "time", label: "Time" },
     { key: "name", label: "Item" },
     { key: "category", label: "Category" },
+    { key: "gender", label: "Gender" },
     { key: "venue", label: "Venue / Stage" },
     { key: "round_label", label: "Round" },
     { key: "status", label: "Status" },
@@ -344,6 +401,7 @@ export default function AdminSchedulePage() {
     time: formatScheduledTime(item.scheduled_time),
     name: item.event?.name ?? item.name,
     category: item.event ? eventCategoryName(item.event) : "—",
+    gender: item.event ? genderLabel(eventGender(item.event)) : "—",
     venue: item.venue?.name ?? "",
   }));
 
@@ -362,6 +420,7 @@ export default function AdminSchedulePage() {
                 statusFilter !== ALL ? statusFilter : null,
                 categories.find((c) => String(c.id) === String(categoryFilter))
                   ?.name,
+                genderFilter !== ALL ? genderLabel(genderFilter) : null,
                 events.find((ev) => String(ev.id) === String(eventFilter))
                   ?.name,
               ]}
@@ -375,6 +434,11 @@ export default function AdminSchedulePage() {
                   value: categories.find(
                     (c) => String(c.id) === String(categoryFilter),
                   )?.name,
+                },
+                {
+                  label: "Gender",
+                  value:
+                    genderFilter !== ALL ? genderLabel(genderFilter) : null,
                 },
                 {
                   label: "Event",
@@ -392,7 +456,7 @@ export default function AdminSchedulePage() {
         }
       />
 
-      <div className="mb-4 grid gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#262626] p-4 sm:grid-cols-3 sm:max-w-2xl">
+      <div className="mb-4 grid gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#262626] p-4 sm:grid-cols-4 sm:max-w-3xl">
         <Field label="Status">
           <Select
             value={statusFilter}
@@ -420,6 +484,19 @@ export default function AdminSchedulePage() {
             ))}
           </Select>
         </Field>
+        <Field label="Gender">
+          <Select
+            value={genderFilter}
+            onChange={(e) => handleGenderFilterChange(e.target.value)}
+          >
+            <option value={ALL}>All genders</option>
+            {GENDER_OPTIONS.map((g) => (
+              <option key={g} value={g}>
+                {genderLabel(g)}
+              </option>
+            ))}
+          </Select>
+        </Field>
         <Field label="Event">
           <Select
             value={eventFilter}
@@ -431,6 +508,9 @@ export default function AdminSchedulePage() {
                 {ev.name}
                 {categoryFilter === ALL && eventCategoryName(ev)
                   ? ` — ${eventCategoryName(ev)}`
+                  : ""}
+                {genderFilter === ALL && eventGender(ev)
+                  ? ` (${genderLabel(eventGender(ev))})`
                   : ""}
               </option>
             ))}
@@ -450,6 +530,7 @@ export default function AdminSchedulePage() {
             <Th>Time</Th>
             <Th>Item</Th>
             <Th>Category</Th>
+            <Th>Gender</Th>
             <Th>Round</Th>
             <Th>Venue / Stage</Th>
             <Th>Source</Th>
@@ -462,7 +543,7 @@ export default function AdminSchedulePage() {
           {loading && (
             <tr>
               <Td
-                colSpan={9}
+                colSpan={10}
                 className="py-8 text-center text-sm text-slate-500 dark:text-slate-400"
               >
                 Loading schedule…
@@ -486,6 +567,9 @@ export default function AdminSchedulePage() {
                   </Td>
                   <Td className="text-xs">
                     {isCompetition ? eventCategoryName(item.event) || "—" : "—"}
+                  </Td>
+                  <Td className="text-xs">
+                    {isCompetition ? genderLabel(eventGender(item.event)) : "—"}
                   </Td>
                   <Td className="text-xs">{item.round_label || "—"}</Td>
                   <Td className="text-xs">{item.venue?.name ?? "—"}</Td>
@@ -549,7 +633,7 @@ export default function AdminSchedulePage() {
           {!loading && visibleScheduleItems.length === 0 && (
             <tr>
               <Td
-                colSpan={9}
+                colSpan={10}
                 className="py-8 text-center text-sm text-slate-500 dark:text-slate-400"
               >
                 No schedule items match these filters.
@@ -580,7 +664,7 @@ export default function AdminSchedulePage() {
           </Field>
 
           {form.source === "competition" ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Field
                 label="Category"
                 hint="Choose this first to narrow the event list"
@@ -600,11 +684,24 @@ export default function AdminSchedulePage() {
                   ))}
                 </Select>
               </Field>
+              <Field label="Gender" hint="Optional — narrows further">
+                <Select
+                  value={form.gender}
+                  onChange={(e) => handleGenderChange(e.target.value)}
+                >
+                  <option value="">All genders</option>
+                  {GENDER_OPTIONS.map((g) => (
+                    <option key={g} value={g}>
+                      {genderLabel(g)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
               <Field
                 label="Competition event"
                 hint={
                   form.category_id
-                    ? "Only events in the chosen category"
+                    ? "Only matching events shown"
                     : "Pick a category first"
                 }
               >
@@ -621,12 +718,15 @@ export default function AdminSchedulePage() {
                       : !form.category_id
                         ? "Select a category first"
                         : eventsForForm.length === 0
-                          ? "No events in this category"
+                          ? "No matching events"
                           : "Select an event"}
                   </option>
                   {eventsForForm.map((ev) => (
                     <option key={ev.id} value={ev.id}>
                       {ev.name}
+                      {!form.gender && eventGender(ev)
+                        ? ` (${genderLabel(eventGender(ev))})`
+                        : ""}
                     </option>
                   ))}
                 </Select>
