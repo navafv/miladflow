@@ -7,8 +7,11 @@ const A4_LANDSCAPE = { width: 297, height: 210 };
 const A3_PORTRAIT = { width: 297, height: 420 };
 const A3_LANDSCAPE = { width: 420, height: 297 };
 
-const PAGE_PADDING_MM = 10;
-const GAP_MM = 3;
+// Full-bleed: no page padding, no gap between cards. Cards butt up against
+// each other and rely on their own border to stay visually separated, and
+// against the trim edge for cutting.
+const PAGE_PADDING_MM = 0;
+const GAP_MM = 0;
 
 const LAYOUTS = {
   9: {
@@ -43,47 +46,17 @@ const LAYOUTS = {
 
 const MAX_VISIBLE_EVENTS = 7;
 
-// Baseline sizing is tuned for 4 events (the common case). Fewer events get
-// a bit more breathing room; more events shrink gracefully so up to
-// MAX_VISIBLE_EVENTS (7) still fits the card's fixed height.
-const EVENT_LIST_SIZE_STEPS = {
-  1: {
-    fontSize: "2.8mm",
-    badgeSize: "4.2mm",
-    badgeFont: "2.2mm",
-    gap: "1.4mm",
-  },
-  2: {
-    fontSize: "2.8mm",
-    badgeSize: "4.2mm",
-    badgeFont: "2.2mm",
-    gap: "1.4mm",
-  },
-  3: { fontSize: "2.6mm", badgeSize: "3.9mm", badgeFont: "2mm", gap: "1.2mm" },
-  4: {
-    fontSize: "2.5mm",
-    badgeSize: "3.6mm",
-    badgeFont: "1.9mm",
-    gap: "1.1mm",
-  }, // default
-  5: {
-    fontSize: "2.4mm",
-    badgeSize: "3.4mm",
-    badgeFont: "1.8mm",
-    gap: "0.9mm",
-  },
-  6: {
-    fontSize: "2.3mm",
-    badgeSize: "3.2mm",
-    badgeFont: "1.7mm",
-    gap: "0.8mm",
-  },
-  7: { fontSize: "2.2mm", badgeSize: "3mm", badgeFont: "1.6mm", gap: "0.7mm" },
+// Fixed sizing applied to every event row regardless of how many events a
+// student has, so all cards read consistently at a glance.
+const EVENT_LIST_SIZING = {
+  fontSize: "3.5mm",
+  badgeSize: "4.8mm",
+  badgeFont: "2.4mm",
+  gap: "1.6mm",
 };
 
-function getEventListSizing(rowCount) {
-  const clamped = Math.min(Math.max(rowCount, 1), MAX_VISIBLE_EVENTS);
-  return EVENT_LIST_SIZE_STEPS[clamped];
+function getEventListSizing() {
+  return EVENT_LIST_SIZING;
 }
 
 function chunk(list, size) {
@@ -98,11 +71,10 @@ function CardFront({ student, madrassaName }) {
   const extraEventsCount = events.length - visibleEvents.length;
   // "+N more" counts as a row for sizing purposes too, so the text doesn't
   // suddenly jump in size right when the overflow line appears.
-  const eventRowCount = visibleEvents.length + (extraEventsCount > 0 ? 1 : 0);
-  const eventSizing = getEventListSizing(eventRowCount);
+  const eventSizing = getEventListSizing();
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[4mm] border border-[#171717]/20 bg-white text-[#171717] shadow-sm">
+    <div className="relative flex h-full w-full flex-col overflow-hidden border border-[#171717]/20 bg-white text-[#171717]">
       <div className="absolute top-0 left-0 right-0 h-[1.5mm] bg-[#21F1A8]" />
 
       <div className="mt-[1.5mm] flex flex-col items-center justify-center border-b border-[#171717]/10 bg-white px-[2mm] py-[3mm]">
@@ -116,37 +88,23 @@ function CardFront({ student, madrassaName }) {
           <p className="line-clamp-3 text-[4.2mm] font-black leading-tight tracking-tight text-[#171717]">
             {student.name}
           </p>
-          <p className="mt-[1.5mm] rounded-md border border-[#21F1A8]/30 bg-[#21F1A8]/20 px-[3mm] py-[1mm] font-mono text-[3mm] font-bold tracking-widest text-[#171717]">
-            {student.student_number ?? student.reg_no ?? "—"}
-          </p>
-        </div>
-
-        <div className="mt-[2mm] flex w-full shrink-0 flex-col rounded-[2mm] border border-slate-100 bg-slate-50 px-[2mm] py-[1.5mm]">
-          <div className="flex items-start justify-between border-b border-slate-200 pb-[1mm] gap-[1mm]">
-            <span className="text-[2.5mm] font-bold uppercase text-slate-400 whitespace-nowrap">
-              Class
+          <div className="mt-[1.5mm] flex items-center justify-center gap-[1.5mm]">
+            <span className="rounded-md border border-[#21F1A8]/30 bg-[#21F1A8]/20 px-[3mm] py-[1mm] font-mono text-[3mm] font-bold tracking-widest text-[#171717]">
+              {student.student_number ?? student.reg_no ?? "—"}
             </span>
-            <span className="line-clamp-2 text-right text-[2.8mm] font-bold leading-tight text-[#171717]">
-              {student.class_name || "—"}
-            </span>
-          </div>
-          <div className="flex items-start justify-between pt-[1mm] gap-[1mm]">
-            <span className="text-[2.5mm] font-bold uppercase text-slate-400 whitespace-nowrap">
-              Category
-            </span>
-            <span className="line-clamp-2 text-right text-[2.8mm] font-bold leading-tight text-[#171717]">
-              {student.category_name || student.category?.name || "—"}
+            <span className="rounded-md border border-slate-200 bg-slate-50 px-[3mm] py-[1mm] text-[3mm] font-bold tracking-wide text-[#171717]">
+              Class: {student.class_name || "—"}
             </span>
           </div>
         </div>
 
         {visibleEvents.length > 0 && (
-          <div className="mt-[2.5mm] flex w-full min-h-0 flex-1 flex-col text-left">
-            <span className="mb-[1.2mm] block shrink-0 border-b border-slate-200 pb-[0.8mm] text-[2.3mm] font-extrabold uppercase tracking-wide text-[#171717]">
+          <div className="mt-[4mm] flex w-full min-h-0 flex-1 flex-col text-left">
+            <span className="mb-[1.2mm] block shrink-0 border-b border-slate-200 pb-[0.8mm] text-[2.6mm] font-extrabold uppercase tracking-wide text-[#171717]">
               Registered Events
             </span>
             <div
-              className="flex min-h-0 flex-1 flex-col justify-center overflow-hidden"
+              className="flex min-h-0 flex-1 flex-col justify-start overflow-hidden"
               style={{ gap: eventSizing.gap }}
             >
               {visibleEvents.map((e, idx) => (
@@ -205,7 +163,7 @@ function CardFront({ student, madrassaName }) {
 
 function CardBack({ student, qrValue }) {
   return (
-    <div className="relative flex h-full w-full flex-col items-center justify-center gap-[2mm] overflow-hidden rounded-[4mm] border border-[#171717]/20 bg-white text-[#171717] shadow-sm">
+    <div className="relative flex h-full w-full flex-col items-center justify-center gap-[2mm] overflow-hidden border border-[#171717]/20 bg-white text-[#171717]">
       <div className="absolute top-0 left-0 right-0 h-[1.5mm] bg-[#21F1A8]" />
 
       <div className="rounded-[3mm] border-[0.8mm] border-[#21F1A8] bg-white p-[2mm]">
@@ -340,7 +298,7 @@ export default function IdCardGenerator({
                   (_, i) => (
                     <div
                       key={`front-pad-${i}`}
-                      className="rounded-[4mm] border-2 border-dashed border-slate-200"
+                      className="border border-dashed border-slate-200"
                     />
                   ),
                 )}
@@ -366,7 +324,7 @@ export default function IdCardGenerator({
                       <div
                         key={`back-pad-${i}`}
                         style={{ direction: "ltr" }}
-                        className="rounded-[4mm] border-2 border-dashed border-slate-200"
+                        className="border border-dashed border-slate-200"
                       />
                     ),
                   )}
