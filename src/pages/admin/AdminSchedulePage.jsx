@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useApiResource } from "../../lib/useApiResource.js";
 import { apiClient, ApiError } from "../../lib/apiClient.js";
 import { useAuth } from "../../lib/authStore.js";
@@ -23,6 +23,7 @@ import { Toast, useToast } from "../../components/admin/Toast.jsx";
 
 const emptyForm = {
   source: "competition",
+  category_id: "",
   event_id: "",
   name: "",
   venue_id: "",
@@ -58,6 +59,13 @@ function formatScheduledTime(isoValue) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function eventCategoryId(ev) {
+  return ev?.category?.id ?? ev?.category_id ?? "";
+}
+function eventCategoryName(ev) {
+  return ev?.category?.name ?? ev?.category_name ?? "";
 }
 
 const ALL = "All";
@@ -97,6 +105,7 @@ export default function AdminSchedulePage() {
   const { me } = useAuth();
   const orgName = me?.madrassa?.name ?? null;
   const [statusFilter, setStatusFilter] = useState(ALL);
+  const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [eventFilter, setEventFilter] = useState(ALL);
 
   const {
@@ -116,7 +125,27 @@ export default function AdminSchedulePage() {
   });
 
   const { data: events, loading: eventsLoading } = useApiResource("/events/");
+  const { data: categories, loading: categoriesLoading } =
+    useApiResource("/categories/");
   const { data: venues, loading: venuesLoading } = useApiResource("/venues/");
+
+  const eventsForCategoryFilter = useMemo(() => {
+    if (categoryFilter === ALL) return events;
+    return events.filter(
+      (ev) => String(eventCategoryId(ev)) === String(categoryFilter),
+    );
+  }, [events, categoryFilter]);
+
+  const handleCategoryFilterChange = (value) => {
+    setCategoryFilter(value);
+    if (value === ALL) return;
+    const stillValid = events.some(
+      (ev) =>
+        String(ev.id) === String(eventFilter) &&
+        String(eventCategoryId(ev)) === String(value),
+    );
+    if (!stillValid) setEventFilter(ALL);
+  };
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -125,11 +154,24 @@ export default function AdminSchedulePage() {
   const [transitioningId, setTransitioningId] = useState(null);
   const { toast, showToast, dismiss } = useToast();
 
+  const eventsForForm = useMemo(() => {
+    if (!form.category_id) return [];
+    return events.filter(
+      (ev) => String(eventCategoryId(ev)) === String(form.category_id),
+    );
+  }, [events, form.category_id]);
+
   const openAdd = () => {
     setEditingId(null);
+    const firstCategoryId =
+      categoryFilter !== ALL ? categoryFilter : (categories[0]?.id ?? "");
+    const firstEvent = events.find(
+      (ev) => String(eventCategoryId(ev)) === String(firstCategoryId),
+    );
     setForm({
       ...emptyForm,
-      event_id: events[0]?.id ?? "",
+      category_id: firstCategoryId,
+      event_id: firstEvent?.id ?? "",
       venue_id: venues[0]?.id ?? "",
     });
     setFormError("");
@@ -142,7 +184,10 @@ export default function AdminSchedulePage() {
     setEditingId(item.id);
     setForm({
       source: isCompetition ? "competition" : "custom",
-      event_id: item.event?.id ?? events[0]?.id ?? "",
+      category_id: isCompetition
+        ? String(eventCategoryId(item.event) ?? "")
+        : "",
+      event_id: item.event?.id ?? "",
       name: isCompetition ? "" : (item.name ?? ""),
       venue_id: item.venue?.id ?? "",
       scheduled_date: date,
@@ -159,6 +204,17 @@ export default function AdminSchedulePage() {
     } catch {
       showToast("Could not delete this schedule item. Please try again.");
     }
+  };
+
+  const handleCategoryChange = (categoryId) => {
+    const firstMatch = events.find(
+      (ev) => String(eventCategoryId(ev)) === String(categoryId),
+    );
+    setForm((f) => ({
+      ...f,
+      category_id: categoryId,
+      event_id: firstMatch?.id ?? "",
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -187,8 +243,21 @@ export default function AdminSchedulePage() {
             round_label: form.round_label,
           };
 
+    if (form.source === "competition" && !form.category_id) {
+      setFormError("Please choose a category first.");
+      return;
+    }
     if (form.source === "competition" && !payload.event_id) {
       setFormError("Please choose a competition event.");
+      return;
+    }
+    if (
+      form.source === "competition" &&
+      !eventsForForm.some((ev) => String(ev.id) === String(form.event_id))
+    ) {
+      setFormError(
+        "That event doesn't belong to the selected category. Please re-select.",
+      );
       return;
     }
     if (form.source === "custom" && !form.name.trim()) {
@@ -253,17 +322,28 @@ export default function AdminSchedulePage() {
     }
   };
 
+  const visibleScheduleItems = useMemo(() => {
+    if (categoryFilter === ALL) return scheduleItems;
+    return scheduleItems.filter(
+      (item) =>
+        !item.event ||
+        String(eventCategoryId(item.event)) === String(categoryFilter),
+    );
+  }, [scheduleItems, categoryFilter]);
+
   const exportColumns = [
     { key: "time", label: "Time" },
     { key: "name", label: "Item" },
+    { key: "category", label: "Category" },
     { key: "venue", label: "Venue / Stage" },
     { key: "round_label", label: "Round" },
     { key: "status", label: "Status" },
   ];
-  const exportRows = scheduleItems.map((item) => ({
+  const exportRows = visibleScheduleItems.map((item) => ({
     ...item,
     time: formatScheduledTime(item.scheduled_time),
     name: item.event?.name ?? item.name,
+    category: item.event ? eventCategoryName(item.event) : "—",
     venue: item.venue?.name ?? "",
   }));
 
@@ -280,6 +360,8 @@ export default function AdminSchedulePage() {
               filename="Schedule"
               filterLabels={[
                 statusFilter !== ALL ? statusFilter : null,
+                categories.find((c) => String(c.id) === String(categoryFilter))
+                  ?.name,
                 events.find((ev) => String(ev.id) === String(eventFilter))
                   ?.name,
               ]}
@@ -287,6 +369,12 @@ export default function AdminSchedulePage() {
                 {
                   label: "Status",
                   value: statusFilter !== ALL ? statusFilter : null,
+                },
+                {
+                  label: "Category",
+                  value: categories.find(
+                    (c) => String(c.id) === String(categoryFilter),
+                  )?.name,
                 },
                 {
                   label: "Event",
@@ -304,7 +392,7 @@ export default function AdminSchedulePage() {
         }
       />
 
-      <div className="mb-4 grid gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#262626] p-4 sm:grid-cols-2 sm:max-w-md">
+      <div className="mb-4 grid gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#262626] p-4 sm:grid-cols-3 sm:max-w-2xl">
         <Field label="Status">
           <Select
             value={statusFilter}
@@ -318,15 +406,32 @@ export default function AdminSchedulePage() {
             ))}
           </Select>
         </Field>
+        <Field label="Category">
+          <Select
+            disabled={categoriesLoading}
+            value={categoryFilter}
+            onChange={(e) => handleCategoryFilterChange(e.target.value)}
+          >
+            <option value={ALL}>All categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
         <Field label="Event">
           <Select
             value={eventFilter}
             onChange={(e) => setEventFilter(e.target.value)}
           >
             <option value={ALL}>All events</option>
-            {events.map((ev) => (
+            {eventsForCategoryFilter.map((ev) => (
               <option key={ev.id} value={ev.id}>
                 {ev.name}
+                {categoryFilter === ALL && eventCategoryName(ev)
+                  ? ` — ${eventCategoryName(ev)}`
+                  : ""}
               </option>
             ))}
           </Select>
@@ -344,6 +449,7 @@ export default function AdminSchedulePage() {
           <tr>
             <Th>Time</Th>
             <Th>Item</Th>
+            <Th>Category</Th>
             <Th>Round</Th>
             <Th>Venue / Stage</Th>
             <Th>Source</Th>
@@ -356,7 +462,7 @@ export default function AdminSchedulePage() {
           {loading && (
             <tr>
               <Td
-                colSpan={8}
+                colSpan={9}
                 className="py-8 text-center text-sm text-slate-500 dark:text-slate-400"
               >
                 Loading schedule…
@@ -364,7 +470,7 @@ export default function AdminSchedulePage() {
             </tr>
           )}
           {!loading &&
-            scheduleItems.map((item) => {
+            visibleScheduleItems.map((item) => {
               const isCompetition = !!item.event;
               const busy = mutating || transitioningId === item.id;
               return (
@@ -377,6 +483,9 @@ export default function AdminSchedulePage() {
                   </Td>
                   <Td className="font-semibold text-slate-900 dark:text-white">
                     {item.event?.name ?? item.name}
+                  </Td>
+                  <Td className="text-xs">
+                    {isCompetition ? eventCategoryName(item.event) || "—" : "—"}
                   </Td>
                   <Td className="text-xs">{item.round_label || "—"}</Td>
                   <Td className="text-xs">{item.venue?.name ?? "—"}</Td>
@@ -437,10 +546,10 @@ export default function AdminSchedulePage() {
                 </tr>
               );
             })}
-          {!loading && scheduleItems.length === 0 && (
+          {!loading && visibleScheduleItems.length === 0 && (
             <tr>
               <Td
-                colSpan={8}
+                colSpan={9}
                 className="py-8 text-center text-sm text-slate-500 dark:text-slate-400"
               >
                 No schedule items match these filters.
@@ -471,27 +580,58 @@ export default function AdminSchedulePage() {
           </Field>
 
           {form.source === "competition" ? (
-            <Field
-              label="Competition event"
-              hint="Pulled from your Events list"
-            >
-              <Select
-                disabled={eventsLoading}
-                value={form.event_id}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, event_id: e.target.value }))
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field
+                label="Category"
+                hint="Choose this first to narrow the event list"
+              >
+                <Select
+                  disabled={categoriesLoading}
+                  value={form.category_id}
+                  onChange={(e) => handleCategoryChange(e.target.value)}
+                >
+                  <option value="" disabled>
+                    {categoriesLoading ? "Loading…" : "Select a category"}
+                  </option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field
+                label="Competition event"
+                hint={
+                  form.category_id
+                    ? "Only events in the chosen category"
+                    : "Pick a category first"
                 }
               >
-                <option value="" disabled>
-                  {eventsLoading ? "Loading…" : "Select an event"}
-                </option>
-                {events.map((ev) => (
-                  <option key={ev.id} value={ev.id}>
-                    {ev.name}
+                <Select
+                  disabled={eventsLoading || !form.category_id}
+                  value={form.event_id}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, event_id: e.target.value }))
+                  }
+                >
+                  <option value="" disabled>
+                    {eventsLoading
+                      ? "Loading…"
+                      : !form.category_id
+                        ? "Select a category first"
+                        : eventsForForm.length === 0
+                          ? "No events in this category"
+                          : "Select an event"}
                   </option>
-                ))}
-              </Select>
-            </Field>
+                  {eventsForForm.map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      {ev.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
           ) : (
             <Field
               label="Custom event name"
