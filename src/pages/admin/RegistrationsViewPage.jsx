@@ -188,6 +188,26 @@ export default function RegistrationsViewPage() {
     teams,
   ]);
 
+  const judgeSheetEvents = useMemo(() => {
+    if (!matrix) return [];
+    const categoryName =
+      categories.find((c) => String(c.id) === String(categoryFilter))?.name ??
+      (categoryFilter !== ALL ? categoryFilter : null);
+    const genderLabel =
+      GENDER_OPTIONS.find((g) => g.value === genderFilter)?.label ?? null;
+
+    return matrix.events
+      .map((ev) => ({
+        eventName: ev.name,
+        categoryLabel: categoryName,
+        genderLabel,
+        students: matrix.students
+          .filter((s) => isRegistered(s.id, ev.id))
+          .map((s) => ({ regNo: s.reg_no })),
+      }))
+      .filter((ev) => ev.students.length > 0);
+  }, [matrix, categories, categoryFilter, genderFilter]);
+
   const [auditRows, setAuditRows] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState(null);
@@ -239,6 +259,7 @@ export default function RegistrationsViewPage() {
               allLabel="All_Students"
               title="Registrations Report"
               orgName={orgName}
+              judgeSheetEvents={judgeSheetEvents}
             />
           ) : null
         }

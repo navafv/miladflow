@@ -8,6 +8,7 @@ import {
   ensureMalayalamFontFace,
   registerMalayalamPdfFont,
 } from "../../lib/pdfFonts.js";
+import { generateJudgeSheetsPDF } from "../../lib/judgeSheetsPdf.js";
 import { buildExportFilename } from "../../lib/exportFilename.js";
 
 function DownloadIcon() {
@@ -374,9 +375,31 @@ export default function ExportButtons({
   title,
   subtitle,
   orgName,
+  judgeSheetEvents = [],
 }) {
   const [pdfExporting, setPdfExporting] = useState(false);
   const [pdfError, setPdfError] = useState(null);
+  const [judgeModalOpen, setJudgeModalOpen] = useState(false);
+  const [judgeCount, setJudgeCount] = useState(2);
+  const [judgeGenerating, setJudgeGenerating] = useState(false);
+  const [judgeError, setJudgeError] = useState(null);
+
+  const handleGenerateJudgeSheets = async () => {
+    setJudgeError(null);
+    setJudgeGenerating(true);
+    try {
+      await ensureMalayalamFontFace();
+      await generateJudgeSheetsPDF(judgeSheetEvents, judgeCount, {
+        orgName,
+        filename: `${filename}-Judge-Sheets`,
+      });
+      setJudgeModalOpen(false);
+    } catch (err) {
+      setJudgeError(err?.message ?? "Could not generate judge sheets.");
+    } finally {
+      setJudgeGenerating(false);
+    }
+  };
 
   const buildFilename = () =>
     buildExportFilename({
@@ -446,11 +469,74 @@ export default function ExportButtons({
           <DownloadIcon />
           {pdfExporting ? "Generating…" : "Export PDF"}
         </button>
+        {judgeSheetEvents.length > 0 && (
+          <button
+            onClick={() => setJudgeModalOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-100 hover:text-[#171717] dark:border-slate-700 dark:bg-[#262626] dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-[#21F1A8]"
+          >
+            <DownloadIcon />
+            Judge Sheets
+          </button>
+        )}
       </div>
       {pdfError && (
         <p className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
           {pdfError}
         </p>
+      )}
+
+      {judgeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-white/20 bg-white/80 dark:bg-[#262626]/80 backdrop-blur-xl p-5 shadow-2xl">
+            <h3 className="mb-1 text-sm font-bold text-slate-900 dark:text-white">
+              Generate Judge Sheets
+            </h3>
+            <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+              How many judges per event?
+            </p>
+
+            <div className="mb-4 grid grid-cols-4 gap-2">
+              {[1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setJudgeCount(n)}
+                  className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                    judgeCount === n
+                      ? "border-[#21F1A8] bg-[#21F1A8] text-[#171717]"
+                      : "border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-[#171717]/40 text-slate-700 dark:text-slate-200 hover:bg-[#21F1A8]/10"
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+
+            {judgeError && (
+              <p className="mb-3 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                {judgeError}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setJudgeModalOpen(false)}
+                className="rounded-lg px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateJudgeSheets}
+                disabled={judgeGenerating}
+                className="rounded-lg bg-[#21F1A8] px-4 py-2 text-xs font-bold text-[#171717] shadow-sm transition-colors hover:bg-[#1cd694] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {judgeGenerating ? "Generating…" : "Generate PDF"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
