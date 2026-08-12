@@ -44,10 +44,25 @@ function normalizeTeam(row) {
   };
 }
 
+function genderLabel(value) {
+  if (!value) return "";
+  if (value === "mixed") return "Mixed";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatCategoryTag(categoryName, gender) {
+  if (!categoryName) return "";
+  if (gender && gender !== "mixed") {
+    return `[${categoryName} - ${genderLabel(gender)}]`;
+  }
+  return `[${categoryName}]`;
+}
+
 function normalizeScheduleItem(item) {
   return {
     id: item.id,
     eventName: item.title ?? item.event_name ?? "Event",
+    categoryTag: formatCategoryTag(item.category_name, item.gender),
     venue: item.venue_name ?? "—",
     time: item.scheduled_time ?? null,
     status: item.status ?? "upcoming",
@@ -414,13 +429,18 @@ function HappeningNow({ events }) {
             >
               <div className="min-w-0">
                 <p
-                  className={`truncate text-lg font-bold lg:text-xl 2xl:text-2xl ${
+                  className={`text-lg font-bold leading-snug lg:text-xl 2xl:text-2xl ${
                     isPaused
                       ? "text-slate-500 dark:text-slate-400"
                       : "text-slate-900 dark:text-white"
                   }`}
                 >
                   {e.eventName}
+                  {e.categoryTag && (
+                    <span className="ml-1.5 text-sm font-medium text-slate-500 dark:text-slate-400 lg:text-base">
+                      {e.categoryTag}
+                    </span>
+                  )}
                 </p>
                 <p className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400 lg:text-base 2xl:text-lg">
                   {e.venue}

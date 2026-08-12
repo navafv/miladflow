@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import SeoHead from "../components/SeoHead.jsx";
 import MadrassaNavbar from "../components/MadrassaNavbar.jsx";
@@ -7,12 +8,27 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import { usePublicResource } from "../lib/usePublicResource.js";
 import { formatTime, dateKey, formatDateHeading } from "../lib/formatTime.js";
 
+function genderLabel(value) {
+  if (!value) return "";
+  if (value === "mixed") return "Mixed";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatCategoryTag(categoryName, gender) {
+  if (!categoryName) return "";
+  if (gender && gender !== "mixed") {
+    return `[${categoryName} - ${genderLabel(gender)}]`;
+  }
+  return `[${categoryName}]`;
+}
+
 function normalizeScheduleItem(row) {
   return {
     id: row.id,
     scheduledTime: row.scheduled_time,
     time: formatTime(row.scheduled_time),
     name: row.title,
+    categoryTag: formatCategoryTag(row.category_name, row.gender),
     venue: row.venue_name,
     status: row.status ?? "upcoming",
     roundLabel: row.round_label ?? "",
@@ -36,6 +52,14 @@ function groupByDate(items) {
   return Array.from(buckets.values());
 }
 
+const ALL_STAGES = "All";
+
+const focusRing =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#21F1A8] focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-50 dark:focus-visible:ring-offset-[#171717]";
+
+const cardClass =
+  "rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#262626] dark:shadow-none";
+
 function SkeletonItem() {
   return (
     <div className="animate-pulse rounded-2xl border border-neutral-200 bg-white px-5 py-4 shadow-sm dark:border-white/10 dark:bg-[#262626] dark:shadow-none">
@@ -57,11 +81,25 @@ export default function SchedulePage() {
     error,
   } = usePublicResource(slug ? `/public/${slug}/schedule/` : null);
 
+  const rawItems = Array.isArray(scheduleResponse) ? scheduleResponse : [];
+  const items = useMemo(() => rawItems.map(normalizeScheduleItem), [rawItems]);
+
+  const [venueFilter, setVenueFilter] = useState(ALL_STAGES);
+  const venues = useMemo(() => {
+    const set = new Set();
+    items.forEach((i) => {
+      if (i.venue) set.add(i.venue);
+    });
+    return Array.from(set).sort();
+  }, [items]);
+
   if (festivalNotFound || scheduleNotFound) return <PublicUnavailable />;
 
-  const rawItems = Array.isArray(scheduleResponse) ? scheduleResponse : [];
-  const items = rawItems.map(normalizeScheduleItem);
-  const dayGroups = groupByDate(items);
+  const filteredItems =
+    venueFilter === ALL_STAGES
+      ? items
+      : items.filter((i) => i.venue === venueFilter);
+  const dayGroups = groupByDate(filteredItems);
   const festivalYear = festival?.festival_year ?? festival?.festivalYear ?? "";
   const madrassaName = festival?.name ?? "—";
 
@@ -98,9 +136,29 @@ export default function SchedulePage() {
 
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10">
         {error && (
-          <p className="mb-4 rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 shadow-sm dark:border-red-400/40 dark:bg-red-400/10 dark:text-red-300 dark:shadow-none">
+          <p className="mb-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 shadow-sm dark:border-red-400/40 dark:bg-red-400/10 dark:text-red-300 dark:shadow-none">
             {error}
           </p>
+        )}
+
+        {venues.length > 1 && (
+          <div className={`mb-6 grid gap-3 p-4 sm:max-w-xs ${cardClass}`}>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-neutral-500 dark:text-neutral-400">
+              Stage
+              <select
+                value={venueFilter}
+                onChange={(e) => setVenueFilter(e.target.value)}
+                className={`rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-[#171717] transition-all duration-200 dark:border-white/10 dark:bg-[#171717] dark:text-white ${focusRing}`}
+              >
+                <option value={ALL_STAGES}>All Stages</option>
+                {venues.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         )}
 
         {loading ? (
@@ -111,7 +169,9 @@ export default function SchedulePage() {
           </div>
         ) : dayGroups.length === 0 ? (
           <p className="rounded-2xl border border-neutral-200 bg-white px-5 py-10 text-center text-sm text-neutral-500 shadow-sm dark:border-white/10 dark:bg-[#262626] dark:text-neutral-400 dark:shadow-none">
-            Nothing scheduled yet.
+            {venueFilter === ALL_STAGES
+              ? "Nothing scheduled yet."
+              : `Nothing scheduled at ${venueFilter} yet.`}
           </p>
         ) : (
           <div className="space-y-8">
@@ -148,13 +208,18 @@ export default function SchedulePage() {
                         </span>
                         <div className="relative z-10 min-w-0 flex-1">
                           <p
-                            className={`truncate font-semibold ${
+                            className={`font-semibold leading-snug ${
                               s.isCustom
                                 ? "text-neutral-500 dark:text-neutral-400"
                                 : "text-[#171717] dark:text-white"
                             }`}
                           >
                             {s.name}
+                            {s.categoryTag && (
+                              <span className="ml-1.5 text-sm font-medium text-slate-500 dark:text-neutral-400">
+                                {s.categoryTag}
+                              </span>
+                            )}
                           </p>
                           <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
                             {s.venue}
