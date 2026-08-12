@@ -3,34 +3,15 @@ import autoTable from "jspdf-autotable";
 import { PDF_FONT_NAME, registerMalayalamPdfFont } from "./pdfFonts.js";
 
 const MARGIN_PT = 20;
-const GUTTER_PT = 14; // space around each dashed cut-line
+const GUTTER_PT = 14;
 const INK = [23, 23, 23];
 const MUTED = [110, 118, 128];
 const RULE = [210, 216, 222];
 const BRAND = [16, 145, 105];
 const HEAD_BG = [33, 241, 168];
 
-const SHEETS_PER_PAGE = 2; // left / right — was 3, but 3-wide left no room
-// for the larger, more readable type below (each sheet would only get
-// ~258pt of width for a 5-column table). 2-per-page gives each sheet
-// ~394pt, enough for 10.5pt body text with proper padding to fit without
-// column overlap or heavy line-wrapping.
+const SHEETS_PER_PAGE = 2;
 
-/**
- * registrationsByEvent shape:
- * [
- *   {
- *     eventName: string,
- *     categoryLabel?: string,
- *     genderLabel?: string,
- *     students: [{ regNo: string }, ...],
- *   },
- *   ...
- * ]
- *
- * Produces judgeCount identical blank scoring sheets per event, 3 sheets
- * per A4 landscape page (left/center/right) separated by dashed cut-lines.
- */
 export async function generateJudgeSheetsPDF(
   registrationsByEvent,
   judgeCount,
@@ -76,7 +57,6 @@ export async function generateJudgeSheetsPDF(
     slot = slot === SHEETS_PER_PAGE - 1 ? 0 : slot + 1;
   });
 
-  // Dashed vertical cut-lines between columns, on every page
   const totalPages = doc.internal.getNumberOfPages();
   for (let p = 1; p <= totalPages; p += 1) {
     doc.setPage(p);
@@ -91,6 +71,34 @@ export async function generateJudgeSheetsPDF(
   }
 
   doc.save(`${filename}.pdf`);
+}
+
+function buildIndividualRows(students) {
+  return students.map((s, idx) => [String(idx + 1), s.regNo ?? "", "", "", ""]);
+}
+
+function buildGroupRows(students) {
+  const order = [];
+  const groups = new Map();
+  students.forEach((s) => {
+    const key = s.teamName || "Unassigned";
+    if (!groups.has(key)) {
+      groups.set(key, []);
+      order.push(key);
+    }
+    groups.get(key).push(s);
+  });
+
+  return order.map((teamName, idx) => {
+    const members = groups.get(teamName);
+    const lines = [
+      teamName,
+      ...members.map(
+        (m) => `- ${m.name ?? "Unknown"} (Reg: ${m.regNo ?? "—"})`,
+      ),
+    ];
+    return [String(idx + 1), lines.join("\n"), "", "", ""];
+  });
 }
 
 function drawJudgeSheet(
@@ -136,25 +144,30 @@ function drawJudgeSheet(
   doc.line(left, y + 6, left + width, y + 6);
   y += 16;
 
-  const rows = ev.students.map((s, idx) => [
-    String(idx + 1),
-    s.regNo ?? "",
-    "",
-    "",
-    "",
-  ]);
+  const isGroup = Boolean(ev.isGroup);
+  const rows = isGroup
+    ? buildGroupRows(ev.students)
+    : buildIndividualRows(ev.students);
+  const secondColumnHeader = isGroup ? "Team / Members" : "Reg No";
+
+  const columnStyles = isGroup
+    ? {
+        0: { cellWidth: width * 0.08 },
+        1: { cellWidth: width * 0.56 },
+        2: { cellWidth: width * 0.12 },
+        3: { cellWidth: width * 0.12 },
+      }
+    : {
+        0: { cellWidth: width * 0.12 },
+        1: { cellWidth: width * 0.32 },
+        2: { cellWidth: width * 0.16 },
+        3: { cellWidth: width * 0.16 },
+      };
 
   autoTable(doc, {
-    head: [["Sl No", "Reg No", "Code", "Score", "Remarks"]],
+    head: [["Sl No", secondColumnHeader, "Code", "Score", "Remarks"]],
     body: rows,
     startY: y,
-    // The 3-sheets-per-page grid is laid out manually above (slot / left /
-    // doc.addPage()). Without an explicit bottom margin, autoTable's own
-    // default page-break logic can decide a long roster needs a page of
-    // its own and call doc.addPage() internally — which desyncs the
-    // manual column bookkeeping and silently drops rows from a sheet.
-    // Pinning the margin to this sheet's own box and disabling autoTable's
-    // pagination keeps every event's full roster inside its own column.
     margin: { left, right: pageWidth - left - width, top, bottom: top },
     tableWidth: width,
     pageBreak: "avoid",
@@ -167,6 +180,7 @@ function drawJudgeSheet(
       lineColor: RULE,
       lineWidth: 0.5,
       overflow: "linebreak",
+      valign: "top",
     },
     headStyles: {
       fillColor: HEAD_BG,
@@ -179,12 +193,6 @@ function drawJudgeSheet(
       fontSize: 10.5,
       cellPadding: 4,
     },
-    columnStyles: {
-      0: { cellWidth: width * 0.12 },
-      1: { cellWidth: width * 0.32 },
-      2: { cellWidth: width * 0.16 },
-      3: { cellWidth: width * 0.16 },
-      // remarks column takes the remaining width automatically
-    },
+    columnStyles,
   });
 }
