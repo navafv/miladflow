@@ -130,8 +130,7 @@ function isGroupEvent(ev) {
 }
 
 function formatStudentLine(s) {
-  const name = s.name?.trim() || "Unnamed Student";
-  return s.regNo ? `${name} (Reg: ${s.regNo})` : name;
+  return s.regNo ? `(Reg: ${s.regNo})` : name;
 }
 
 /**
