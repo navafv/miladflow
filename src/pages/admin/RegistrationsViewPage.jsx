@@ -202,14 +202,9 @@ export default function RegistrationsViewPage() {
         eventName: ev.name,
         categoryLabel: categoryName,
         genderLabel,
-        isGroup: ev.event_type === "group",
         students: matrix.students
           .filter((s) => isRegistered(s.id, ev.id))
-          .map((s) => ({
-            regNo: s.reg_no,
-            name: s.name,
-            teamName: s.team_name,
-          })),
+          .map((s) => ({ regNo: s.reg_no })),
       }))
       .filter((ev) => ev.students.length > 0);
   }, [matrix, categories, categoryFilter, genderFilter]);
