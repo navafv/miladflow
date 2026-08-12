@@ -62,8 +62,9 @@ export default function RegistrationsViewPage() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    setMatrix(null);
+
     if (!filtersReady) {
-      setMatrix(null);
       setError(null);
       return;
     }

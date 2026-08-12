@@ -42,7 +42,11 @@ function sanitizeCell(value) {
 }
 
 const PDF_MARGIN_PT = 28;
-const PDF_TABLE_WIDTH_PX = 980;
+// Widened slightly to give the now-larger table font more breathing room
+// per column before wrapping — the whole table is scaled down to fit the
+// PDF page width anyway, so this only affects how much horizontal space
+// each column gets to lay out in before that scale-down happens.
+const PDF_TABLE_WIDTH_PX = 1100;
 const PIXEL_RATIO = 2;
 const FOOTER_SPACE_PT = 26;
 
@@ -106,18 +110,18 @@ function drawLetterhead(doc, { orgName, title, filterSummary }) {
 
   if (title) {
     doc.setFont(PDF_FONT_NAME, "bold");
-    doc.setFontSize(12.5);
+    doc.setFontSize(15);
     doc.setTextColor(...INK);
-    doc.text(title, centerX, y + 10, { align: "center" });
-    y += 17;
+    doc.text(title, centerX, y + 11, { align: "center" });
+    y += 19;
   }
 
   if (filterSummary) {
     doc.setFont(PDF_FONT_NAME, "normal");
-    doc.setFontSize(9.5);
+    doc.setFontSize(11);
     doc.setTextColor(...MUTED);
-    doc.text(filterSummary, centerX, y + 9, { align: "center" });
-    y += 15;
+    doc.text(filterSummary, centerX, y + 10, { align: "center" });
+    y += 17;
   }
 
   y += 6;
@@ -144,7 +148,7 @@ function drawFooter(doc, generatedAt, pageIndex, totalPages) {
   doc.line(PDF_MARGIN_PT, ruleY, pageWidth - PDF_MARGIN_PT, ruleY);
 
   doc.setFont(PDF_FONT_NAME, "normal");
-  doc.setFontSize(8.5);
+  doc.setFontSize(9.5);
   doc.setTextColor(...MUTED);
   doc.text(
     `Generated on: ${formatGeneratedDate(generatedAt)}`,
@@ -174,8 +178,8 @@ function buildExportTableNode({ columns, rows }) {
   const table = document.createElement("table");
   table.style.width = "100%";
   table.style.borderCollapse = "collapse";
-  table.style.fontSize = "13px";
-  table.style.lineHeight = "1.45";
+  table.style.fontSize = "15px";
+  table.style.lineHeight = "1.5";
 
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
@@ -183,11 +187,11 @@ function buildExportTableNode({ columns, rows }) {
     const th = document.createElement("th");
     th.textContent = col.label;
     th.style.textAlign = "left";
-    th.style.padding = "9px 12px";
+    th.style.padding = "12px 14px";
     th.style.background = "#21F1A8";
     th.style.color = "#171717";
     th.style.fontWeight = "700";
-    th.style.fontSize = "13px";
+    th.style.fontSize = "15px";
     th.style.border = "1px solid #171717";
     headRow.appendChild(th);
   });
@@ -201,7 +205,7 @@ function buildExportTableNode({ columns, rows }) {
     columns.forEach((col) => {
       const td = document.createElement("td");
       td.textContent = sanitizeCell(row[col.key]);
-      td.style.padding = "8px 12px";
+      td.style.padding = "11px 14px";
       td.style.border = "1px solid #cbd5e1";
       tr.appendChild(td);
     });
@@ -226,8 +230,9 @@ async function exportTableToPdf(
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
     const tableRect = table.getBoundingClientRect();
-    const theadHeightPx = theadEl.getBoundingClientRect().height * PIXEL_RATIO;
-    const rowBoundsPx = rowEls.map((tr) => {
+    const theadHeightPxMeasured =
+      theadEl.getBoundingClientRect().height * PIXEL_RATIO;
+    const rowBoundsPxMeasured = rowEls.map((tr) => {
       const rect = tr.getBoundingClientRect();
       return {
         top: (rect.top - tableRect.top) * PIXEL_RATIO,
@@ -235,12 +240,22 @@ async function exportTableToPdf(
       };
     });
 
+    // IMPORTANT: do NOT pass skipFonts here. The row boundaries above were
+    // measured from the live DOM, which is rendered with the real
+    // registered Malayalam font (see ensureMalayalamFontFace()). If the
+    // captured canvas is rasterized with a *different* fallback font
+    // (skipFonts: true forces html-to-image to substitute one), each
+    // row's actual painted height differs slightly from what we measured.
+    // That per-row drift accumulates over a long roster, and by the final
+    // page the measured/painted boundaries no longer agree — which is what
+    // was silently cropping the last few students off the bottom of the
+    // last page. Rendering with the same font that was measured keeps the
+    // canvas pixel rows aligned with rowBoundsPx.
     const canvas = await toCanvas(table, {
       pixelRatio: PIXEL_RATIO,
       backgroundColor: "#ffffff",
       width: tableRect.width,
       height: tableRect.height,
-      skipFonts: true,
     });
 
     if (canvas.width === 0 || canvas.height === 0) {
@@ -248,6 +263,23 @@ async function exportTableToPdf(
         "The export table rendered with zero size — nothing to capture.",
       );
     }
+
+    // Defensive rescale: even with matching fonts, browsers can still
+    // sub-pixel round differently between getBoundingClientRect() and the
+    // rasterized canvas. Rather than trust PIXEL_RATIO blindly, rescale
+    // our DOM-measured boundaries onto the canvas's *actual* pixel height
+    // so row slices always stay inside the real captured image — this
+    // guarantees we never compute a page whose last row falls past the
+    // bottom edge of `canvas`.
+    const verticalCorrection =
+      tableRect.height > 0
+        ? canvas.height / (tableRect.height * PIXEL_RATIO)
+        : 1;
+    const theadHeightPx = theadHeightPxMeasured * verticalCorrection;
+    const rowBoundsPx = rowBoundsPxMeasured.map(({ top, bottom }) => ({
+      top: top * verticalCorrection,
+      bottom: Math.min(bottom * verticalCorrection, canvas.height),
+    }));
 
     const generatedAt = new Date();
     const doc = new jsPDF({ unit: "pt", format: "a4" });
