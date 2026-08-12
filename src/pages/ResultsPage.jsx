@@ -61,6 +61,8 @@ function normalizeResult(row) {
     id: row.id,
     event: row.event ?? row.event_name,
     category: row.category ?? row.category_name,
+    isGroup: row.is_group ?? false,
+    groupName: row.group_name ?? null,
     winner: row.winner ?? row.winner_name ?? row.student_name,
     team: row.team ?? row.team_name,
     place: row.place,
@@ -234,7 +236,12 @@ function AllResultsTab({ slug }) {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <span className="hidden text-sm text-neutral-500 dark:text-neutral-400 sm:inline">
+                <span className="hidden items-center gap-1.5 text-sm text-neutral-500 dark:text-neutral-400 sm:inline-flex">
+                  {r.isGroup && r.groupName && (
+                    <span className="rounded-full bg-[#21F1A8]/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#0f9c74] dark:text-[#21F1A8]">
+                      Group
+                    </span>
+                  )}
                   {r.winner}
                 </span>
                 <span
@@ -289,9 +296,16 @@ function PodiumRow({ place, entry, index = 0 }) {
           {placeMedal[place]}
         </span>
         <div>
-          <p className="text-sm font-semibold">
+          <p className="flex items-center gap-1.5 text-sm font-semibold">
             {entry ? (
-              entry.name
+              <>
+                {entry.name}
+                {entry.isGroup && entry.groupName && (
+                  <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide opacity-70 dark:bg-white/10">
+                    Group
+                  </span>
+                )}
+              </>
             ) : (
               <span className="opacity-60">Not yet announced</span>
             )}
@@ -317,7 +331,12 @@ function normalizeByEventGroup(group) {
   placements.forEach((p) => {
     const key = PLACE_KEY[p.place];
     if (!key) return;
-    podium[key].push({ name: p.winner_name, team: p.team_name });
+    podium[key].push({
+      name: p.winner_name,
+      team: p.team_name,
+      isGroup: p.is_group,
+      groupName: p.group_name,
+    });
   });
   return {
     event: {

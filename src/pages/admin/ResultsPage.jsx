@@ -34,6 +34,7 @@ function toWinnerLabel(placement) {
       id: placement.student.id,
       name: placement.student.name,
       team: placement.student.team?.name ?? "",
+      isGroup: false,
     };
   }
   if (placement.group_entry) {
@@ -42,10 +43,16 @@ function toWinnerLabel(placement) {
       id: ge.id,
       name: ge.display_name || ge.captain?.name || placement.team?.name,
       team: placement.team?.name ?? "",
+      isGroup: true,
     };
   }
   if (placement.team) {
-    return { id: placement.team.id, name: placement.team.name, team: "" };
+    return {
+      id: placement.team.id,
+      name: placement.team.name,
+      team: "",
+      isGroup: true,
+    };
   }
   return null;
 }
@@ -380,8 +387,13 @@ export default function ResultsPage() {
                           </span>
                         </div>
                         <div>
-                          <p className="font-semibold text-slate-900 dark:text-white">
+                          <p className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-white">
                             {row.label}
+                            {row.kind === "group_entry" && (
+                              <span className="rounded-full bg-[#21F1A8]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#0f9c74] dark:text-[#21F1A8]">
+                                Group
+                              </span>
+                            )}
                           </p>
                           {row.sub && (
                             <p className="text-[11px] text-slate-500 dark:text-slate-400">

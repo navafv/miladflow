@@ -85,7 +85,10 @@ function normalizePlacement(p) {
     id: p.id,
     eventId: p.event_id,
     eventName: p.event_name ?? "Event",
+    categoryTag: formatCategoryTag(p.category_name, p.gender),
     place: p.place,
+    isGroup: p.is_group ?? false,
+    groupName: p.group_name ?? null,
     name: p.winner_name ?? "—",
     team: p.team_name ?? "",
   };
@@ -107,7 +110,12 @@ function groupPlacementsByEvent(placements) {
   for (const p of placements) {
     const key = p.eventId ?? p.eventName;
     if (!groups.has(key)) {
-      groups.set(key, { eventId: key, eventName: p.eventName, entries: {} });
+      groups.set(key, {
+        eventId: key,
+        eventName: p.eventName,
+        categoryTag: p.categoryTag,
+        entries: {},
+      });
     }
     groups.get(key).entries[p.place] = p;
   }
@@ -502,8 +510,13 @@ function ResultRow({ place, entry }) {
         {medalLabel(place)}
       </span>
       <div className="min-w-0">
-        <p className="truncate text-base font-bold text-slate-900 dark:text-white lg:text-lg 2xl:text-xl">
-          {entry.name}
+        <p className="flex items-center gap-1.5 truncate text-base font-bold text-slate-900 dark:text-white lg:text-lg 2xl:text-xl">
+          <span className="truncate">{entry.name}</span>
+          {entry.isGroup && entry.groupName && (
+            <span className="shrink-0 rounded-full bg-slate-900/5 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-slate-500 dark:bg-white/10 dark:text-slate-400">
+              Group
+            </span>
+          )}
         </p>
         {entry.team && (
           <p className="truncate text-xs text-slate-500 dark:text-slate-400 lg:text-sm">
@@ -549,6 +562,11 @@ function LatestResults({ groupedResults }) {
           >
             <p className="mb-3 truncate text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 lg:text-base">
               {g.eventName}
+              {g.categoryTag && (
+                <span className="ml-1.5 font-medium normal-case text-slate-400 dark:text-slate-500">
+                  {g.categoryTag}
+                </span>
+              )}
             </p>
             <div className="grid grid-cols-3 gap-3">
               <ResultRow place={1} entry={g.entries[1]} />
