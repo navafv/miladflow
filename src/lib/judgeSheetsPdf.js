@@ -1,6 +1,12 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { PDF_FONT_NAME, registerMalayalamPdfFont } from "./pdfFonts.js";
+import {
+  ensureMalayalamFontFace,
+  measureWrap,
+  drawTextLine,
+  drawWrappedText,
+} from "./richText.js";
 
 const MARGIN_PT = 20;
 const GUTTER_PT = 14;
@@ -32,6 +38,7 @@ export async function generateJudgeSheetsPDF(
 ) {
   const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
   await registerMalayalamPdfFont(doc);
+  await ensureMalayalamFontFace();
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -100,15 +107,6 @@ function formatRegNoLine(s) {
   return s.regNo ? `Reg: ${s.regNo}` : "Reg: —";
 }
 
-function drawCenteredWrapped(doc, text, centerX, y, maxWidth, lineHeight) {
-  const lines = doc.splitTextToSize(text, maxWidth);
-  lines.forEach((line) => {
-    doc.text(line, centerX, y, { align: "center" });
-    y += lineHeight;
-  });
-  return y;
-}
-
 function buildEventRows(doc, ev, detailMaxWidth) {
   if (!isGroupEvent(ev)) {
     const students = ev.students ?? [];
@@ -124,23 +122,29 @@ function buildEventRows(doc, ev, detailMaxWidth) {
     const groupName =
       g.groupName?.trim() || g.teamName?.trim() || "Unnamed Group";
 
-    doc.setFont(PDF_FONT_NAME, "bold");
-    doc.setFontSize(DETAIL_FONT_SIZE);
-    const groupNameLines = doc.splitTextToSize(groupName, detailMaxWidth);
-
-    doc.setFont(PDF_FONT_NAME, "normal");
-    doc.setFontSize(DETAIL_FONT_SIZE);
+    const groupNameLines = measureWrap(
+      doc,
+      groupName,
+      detailMaxWidth,
+      DETAIL_FONT_SIZE,
+      true,
+    );
     const memberLines = (g.members ?? []).flatMap((m) =>
-      doc.splitTextToSize(`- ${formatRegNoLine(m)}`, detailMaxWidth),
+      measureWrap(
+        doc,
+        `- ${formatRegNoLine(m)}`,
+        detailMaxWidth,
+        DETAIL_FONT_SIZE,
+        false,
+      ),
     );
 
     return {
       slNo: String(idx + 1),
       isGroup: true,
-      groupName,
       groupNameLines,
       memberLines,
-      detailText: [...groupNameLines, ...memberLines].join("\n"),
+      totalLines: groupNameLines.length + memberLines.length,
     };
   });
 }
@@ -154,10 +158,14 @@ function drawJudgeSheet(
   const centerX = left + width / 2;
 
   if (orgName) {
-    doc.setFont(PDF_FONT_NAME, "bold");
-    doc.setFontSize(ORG_FONT_SIZE);
-    doc.setTextColor(...BRAND);
-    y = drawCenteredWrapped(doc, orgName, centerX, y, width, ORG_LINE_HEIGHT);
+    y = drawWrappedText(doc, orgName, centerX, y, {
+      fontSize: ORG_FONT_SIZE,
+      bold: true,
+      color: BRAND,
+      align: "center",
+      maxWidth: width,
+      lineHeight: ORG_LINE_HEIGHT,
+    });
     y += 4;
   }
 
@@ -165,31 +173,25 @@ function drawJudgeSheet(
   if (isGroupEvent(ev)) subtitleParts.push("Group Event");
   const subtitle = subtitleParts.filter(Boolean).join(" · ");
   if (subtitle) {
-    doc.setFont(PDF_FONT_NAME, "normal");
-    doc.setFontSize(SUBTITLE_FONT_SIZE);
-    doc.setTextColor(...MUTED);
-    y = drawCenteredWrapped(
-      doc,
-      subtitle,
-      centerX,
-      y,
-      width,
-      SUBTITLE_LINE_HEIGHT,
-    );
+    y = drawWrappedText(doc, subtitle, centerX, y, {
+      fontSize: SUBTITLE_FONT_SIZE,
+      bold: false,
+      color: MUTED,
+      align: "center",
+      maxWidth: width,
+      lineHeight: SUBTITLE_LINE_HEIGHT,
+    });
     y += 4;
   }
 
-  doc.setFont(PDF_FONT_NAME, "bold");
-  doc.setFontSize(EVENT_FONT_SIZE);
-  doc.setTextColor(...INK);
-  y = drawCenteredWrapped(
-    doc,
-    ev.eventName,
-    centerX,
-    y,
-    width,
-    EVENT_LINE_HEIGHT,
-  );
+  y = drawWrappedText(doc, ev.eventName, centerX, y, {
+    fontSize: EVENT_FONT_SIZE,
+    bold: true,
+    color: INK,
+    align: "center",
+    maxWidth: width,
+    lineHeight: EVENT_LINE_HEIGHT,
+  });
   y += 4;
 
   doc.setFont(PDF_FONT_NAME, "normal");
@@ -206,7 +208,13 @@ function drawJudgeSheet(
   const detailMaxWidth = detailColWidth - CELL_PADDING * 2;
 
   const eventRows = buildEventRows(doc, ev, detailMaxWidth);
-  const rows = eventRows.map((r) => [r.slNo, r.detailText, "", "", ""]);
+  const rows = eventRows.map((r) => [
+    r.slNo,
+    r.isGroup ? "" : r.detailText,
+    "",
+    "",
+    "",
+  ]);
 
   autoTable(doc, {
     head: [["Sl No", "Student / Team", "Code", "Score", "Remarks"]],
@@ -243,6 +251,16 @@ function drawJudgeSheet(
       2: { cellWidth: width * 0.16 },
       3: { cellWidth: width * 0.16 },
     },
+    didParseCell: (data) => {
+      if (data.section !== "body" || data.column.index !== DETAIL_COL_INDEX) {
+        return;
+      }
+      const meta = eventRows[data.row.index];
+      if (!meta || !meta.isGroup) return;
+
+      const needed = meta.totalLines * DETAIL_LINE_HEIGHT + CELL_PADDING * 2;
+      if (needed > data.row.height) data.row.height = needed;
+    },
     didDrawCell: (data) => {
       if (data.section !== "body" || data.column.index !== DETAIL_COL_INDEX) {
         return;
@@ -268,20 +286,24 @@ function drawJudgeSheet(
       const padTop = cell.padding("top");
       let textY = cell.y + padTop + DETAIL_FONT_SIZE * 0.85;
       const textX = cell.x + padLeft;
-      const maxWidth = cell.width - padLeft - cell.padding("right");
 
-      doc.setFont(PDF_FONT_NAME, "bold");
-      doc.setFontSize(DETAIL_FONT_SIZE);
-      doc.setTextColor(...INK);
       meta.groupNameLines.forEach((line) => {
-        doc.text(line, textX, textY, { maxWidth });
+        drawTextLine(doc, line, textX, textY, {
+          fontSize: DETAIL_FONT_SIZE,
+          bold: true,
+          color: INK,
+          align: "left",
+        });
         textY += DETAIL_LINE_HEIGHT;
       });
 
-      doc.setFont(PDF_FONT_NAME, "normal");
-      doc.setTextColor(...INK);
       meta.memberLines.forEach((line) => {
-        doc.text(line, textX, textY, { maxWidth });
+        drawTextLine(doc, line, textX, textY, {
+          fontSize: DETAIL_FONT_SIZE,
+          bold: false,
+          color: INK,
+          align: "left",
+        });
         textY += DETAIL_LINE_HEIGHT;
       });
     },
