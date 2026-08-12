@@ -90,7 +90,12 @@ export default function RegistrationsViewPage() {
             ([studentId, eventId]) => `${studentId}:${eventId}`,
           ),
         );
-        setMatrix({ events, students, registeredPairs });
+        // Group entries are the real scoring unit for Group events — a
+        // team can field more than one group in the same event, each
+        // with its own name and roster, so these ride along separately
+        // from the flat student list.
+        const groupEntries = result?.group_entries ?? [];
+        setMatrix({ events, students, registeredPairs, groupEntries });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -198,20 +203,45 @@ export default function RegistrationsViewPage() {
       GENDER_OPTIONS.find((g) => g.value === genderFilter)?.label ?? null;
 
     return matrix.events
-      .map((ev) => ({
-        eventName: ev.name,
-        categoryLabel: categoryName,
-        genderLabel,
-        isGroup: ev.event_type === "group",
-        students: matrix.students
-          .filter((s) => isRegistered(s.id, ev.id))
-          .map((s) => ({
-            regNo: s.reg_no,
-            teamId: s.team_id,
-            teamName: s.team_name,
-          })),
-      }))
-      .filter((ev) => ev.students.length > 0);
+      .map((ev) => {
+        const isGroup = ev.event_type === "group";
+
+        if (isGroup) {
+          // Score per GroupEntry, not per team: a team can enter more
+          // than one group in the same event (e.g. Team A's "Squad
+          // Alpha" and "Squad Beta" both in Group Song), and each is a
+          // separate performance with its own name and roster.
+          const groups = matrix.groupEntries
+            .filter((g) => g.event_id === ev.id)
+            .map((g) => ({
+              groupName: g.group_name,
+              teamName: g.team_name,
+              members: (g.students ?? []).map((s) => ({ regNo: s.reg_no })),
+            }))
+            .filter((g) => g.members.length > 0);
+
+          return {
+            eventName: ev.name,
+            categoryLabel: categoryName,
+            genderLabel,
+            isGroup: true,
+            groups,
+          };
+        }
+
+        return {
+          eventName: ev.name,
+          categoryLabel: categoryName,
+          genderLabel,
+          isGroup: false,
+          students: matrix.students
+            .filter((s) => isRegistered(s.id, ev.id))
+            .map((s) => ({ regNo: s.reg_no })),
+        };
+      })
+      .filter((ev) =>
+        ev.isGroup ? ev.groups.length > 0 : ev.students.length > 0,
+      );
   }, [matrix, categories, categoryFilter, genderFilter]);
 
   const [auditRows, setAuditRows] = useState([]);
