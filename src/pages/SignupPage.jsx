@@ -260,9 +260,6 @@ export default function SignupPage() {
           className="animate-auth-rise rounded-2xl border border-neutral-200 bg-white/90 p-8 shadow-2xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-[#262626]/90 dark:shadow-black/40"
           style={{ animationDelay: "80ms" }}
         >
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#21F1A8]/30 bg-[#21F1A8]/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-[#0f9c74] dark:text-[#21F1A8]">
-            Introductory offer · 399
-          </span>
           <h1 className="mt-4 font-display text-2xl font-semibold text-[#171717] dark:text-white">
             Set up your madrassa
           </h1>

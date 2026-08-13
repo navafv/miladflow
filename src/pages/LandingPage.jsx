@@ -15,7 +15,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-white dark:bg-[#171717]">
       <SeoHead
-        description="Run your Madrassa's Milad-un-Nabi festival end to end: registrations, live schedules, category results and public leaderboards — all in one platform built for madrassa committees. Introductory pricing from 399."
+        description="Run your Madrassa's Milad-un-Nabi festival end to end: registrations, live schedules, category results and public leaderboards — all in one platform built for madrassa committees. Introductory pricing from ₹399 for one Madrassa's Milad-e-Nabi festival."
         path="/"
       />
       <PublicNavbar />

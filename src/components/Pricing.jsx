@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
 import Logo from "./Logo.jsx";
 
-const ACTUAL_VALUE = "\u20b91,999";
-const OFFER_PRICE = "\u20b9399";
+const ACTUAL_VALUE = "\u20b92,499";
+const OFFER_PRICE = "\u20b9999";
 const OFFER_LABEL = "Introductory launch offer";
 
 const planFeatures = [
@@ -57,8 +57,8 @@ export default function Pricing() {
               One subscription. Every feature.
             </h2>
             <p className="mt-3 max-w-md text-base text-neutral-600 dark:text-neutral-400 lg:mx-0 mx-auto">
-              No confusing tiers or per-student pricing — a single flat rate per
-              madrassa, per festival.
+              No confusing tiers or per-student pricing — one flat rate for one
+              Madrassa&rsquo;s Milad-e-Nabi festival.
             </p>
 
             <div className="mx-auto mt-10 grid max-w-2xl grid-cols-3 gap-4 text-center lg:mx-0 lg:max-w-md lg:text-left">
@@ -159,11 +159,15 @@ export default function Pricing() {
                     {OFFER_PRICE}
                   </span>
                   <span className="text-sm text-neutral-500 dark:text-neutral-400">
-                    / madrassa / festival
+                    per Milad-e-Nabi
                   </span>
                 </div>
+                <p className="relative mt-1 max-w-xs text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                  Valid for one complete Milad-e-Nabi festival for a single
+                  Madrassa.
+                </p>
                 <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#171717]/5 px-3 py-1 text-xs font-bold text-[#171717] ring-1 ring-[#171717]/10 dark:bg-white/10 dark:text-white dark:ring-white/20">
-                  Save 80% — introductory pricing, limited time
+                  Save 60% — introductory pricing, limited time
                 </span>
               </div>
 
@@ -198,7 +202,7 @@ export default function Pricing() {
                 to="/signup"
                 className={`relative mt-9 block w-full rounded-full bg-[#21F1A8] px-5 py-3.5 text-sm font-bold text-[#171717] shadow-lg transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_25px_#21F1A8] ${focusRing}`}
               >
-                Set up your madrassa
+                Register Your Madrassa for {OFFER_PRICE}
               </Link>
             </div>
           </div>
