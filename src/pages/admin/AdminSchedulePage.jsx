@@ -120,6 +120,7 @@ export default function AdminSchedulePage() {
   const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [genderFilter, setGenderFilter] = useState(ALL);
   const [eventFilter, setEventFilter] = useState(ALL);
+  const [venueFilter, setVenueFilter] = useState(ALL);
 
   const {
     data: scheduleItems,
@@ -135,6 +136,7 @@ export default function AdminSchedulePage() {
   } = useApiResource("/schedule/", {
     status: statusFilter === ALL ? undefined : statusFilter,
     event: eventFilter === ALL ? undefined : eventFilter,
+    venue_id: venueFilter === ALL ? undefined : venueFilter,
     nopage: true,
   });
 
@@ -424,6 +426,7 @@ export default function AdminSchedulePage() {
                 genderFilter !== ALL ? genderLabel(genderFilter) : null,
                 events.find((ev) => String(ev.id) === String(eventFilter))
                   ?.name,
+                venues.find((v) => String(v.id) === String(venueFilter))?.name,
               ]}
               filterSummaryParts={[
                 {
@@ -447,6 +450,12 @@ export default function AdminSchedulePage() {
                     (ev) => String(ev.id) === String(eventFilter),
                   )?.name,
                 },
+                {
+                  label: "Stage",
+                  value: venues.find(
+                    (v) => String(v.id) === String(venueFilter),
+                  )?.name,
+                },
               ]}
               allLabel="Full_Schedule"
               title="Live Schedule Report"
@@ -457,7 +466,7 @@ export default function AdminSchedulePage() {
         }
       />
 
-      <div className="mb-4 grid gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#262626] p-4 sm:grid-cols-4 sm:max-w-3xl">
+      <div className="mb-4 grid gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#262626] p-4 sm:grid-cols-3 lg:grid-cols-5 sm:max-w-3xl lg:max-w-5xl">
         <Field label="Status">
           <Select
             value={statusFilter}
@@ -513,6 +522,22 @@ export default function AdminSchedulePage() {
                 {genderFilter === ALL && eventGender(ev)
                   ? ` (${genderLabel(eventGender(ev))})`
                   : ""}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Stage / Venue">
+          <Select
+            disabled={venuesLoading}
+            value={venueFilter}
+            onChange={(e) => setVenueFilter(e.target.value)}
+          >
+            <option value={ALL}>
+              {venuesLoading ? "Loading…" : "All stages"}
+            </option>
+            {venues.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
               </option>
             ))}
           </Select>
