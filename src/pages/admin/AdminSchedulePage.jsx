@@ -135,6 +135,7 @@ export default function AdminSchedulePage() {
   } = useApiResource("/schedule/", {
     status: statusFilter === ALL ? undefined : statusFilter,
     event: eventFilter === ALL ? undefined : eventFilter,
+    nopage: true,
   });
 
   const { data: events, loading: eventsLoading } = useApiResource("/events/");

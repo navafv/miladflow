@@ -22,6 +22,7 @@ import RegistrationPage from "./pages/admin/RegistrationPage.jsx";
 import RegistrationsViewPage from "./pages/admin/RegistrationsViewPage.jsx";
 import AdminSchedulePage from "./pages/admin/AdminSchedulePage.jsx";
 import AdminResultsPage from "./pages/admin/ResultsPage.jsx";
+import ReportsPage from "./pages/admin/ReportsPage.jsx";
 import SettingsPage from "./pages/admin/SettingsPage.jsx";
 
 function AdminBoundary({ children }) {
@@ -67,6 +68,7 @@ export default function App() {
           />
           <Route path="schedule" element={<AdminSchedulePage />} />
           <Route path="results" element={<AdminResultsPage />} />
+          {/* <Route path="reports" element={<ReportsPage />} /> */}
           <Route path="settings" element={<SettingsPage />} />
         </Route>
 

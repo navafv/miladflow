@@ -26,6 +26,7 @@ const navSections = [
       { to: "/admin/registrations/view", label: "View Registrations" },
       { to: "/admin/schedule", label: "Schedule" },
       { to: "/admin/results", label: "Results" },
+      // { to: "/admin/reports", label: "Reports & Exports" },
     ],
   },
   {

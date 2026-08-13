@@ -163,7 +163,7 @@ function drawFooter(doc, generatedAt, pageIndex, totalPages) {
   );
 }
 
-function buildExportTableNode({ columns, rows }) {
+export function buildExportTableNode({ columns, rows }) {
   const container = document.createElement("div");
   container.style.position = "fixed";
   container.style.top = "0";
@@ -218,7 +218,7 @@ function buildExportTableNode({ columns, rows }) {
   return { container, table, theadEl: thead, rowEls };
 }
 
-async function exportTableToPdf(
+export async function exportTableToPdf(
   { container, table, theadEl, rowEls },
   { orgName, title, filterSummary },
   filename,
