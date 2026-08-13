@@ -391,22 +391,28 @@ export default function AdminSchedulePage() {
   }, [scheduleItems, categoryFilter, genderFilter]);
 
   const exportColumns = [
+    { key: "sl_no", label: "Sl No" },
     { key: "time", label: "Time" },
-    { key: "name", label: "Item" },
-    { key: "category", label: "Category" },
-    { key: "gender", label: "Gender" },
-    { key: "venue", label: "Venue / Stage" },
+    { key: "venue", label: "Stage / Venue" },
+    { key: "event_label", label: "Event" },
     { key: "round_label", label: "Round" },
-    { key: "status", label: "Status" },
   ];
-  const exportRows = visibleScheduleItems.map((item) => ({
-    ...item,
-    time: formatScheduledTime(item.scheduled_time),
-    name: item.event?.name ?? item.name,
-    category: item.event ? eventCategoryName(item.event) : "—",
-    gender: item.event ? genderLabel(eventGender(item.event)) : "—",
-    venue: item.venue?.name ?? "",
-  }));
+  const exportRows = visibleScheduleItems.map((item, index) => {
+    const isCompetition = !!item.event;
+    const name = item.event?.name ?? item.name;
+    const tag = isCompetition
+      ? [eventCategoryName(item.event), genderLabel(eventGender(item.event))]
+          .filter(Boolean)
+          .join(" - ")
+      : "";
+    return {
+      ...item,
+      sl_no: index + 1,
+      time: formatScheduledTime(item.scheduled_time),
+      venue: item.venue?.name ?? "—",
+      event_label: tag ? `[${tag}] ${name}` : name,
+    };
+  });
 
   return (
     <div>
