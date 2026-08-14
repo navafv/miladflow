@@ -226,6 +226,7 @@ export default function RegistrationsViewPage() {
                 regNo: s.reg_no,
                 name: s.name,
                 teamName: s.team_name,
+                className: s.class_name,
               })),
             }))
             .filter((g) => g.members.length > 0);
@@ -250,6 +251,7 @@ export default function RegistrationsViewPage() {
               regNo: s.reg_no,
               name: s.name,
               teamName: s.team_name,
+              className: s.class_name,
             })),
         };
       })

@@ -432,6 +432,7 @@ function JudgeSheetsCard({ categories, orgName }) {
                 regNo: s.reg_no,
                 name: s.name,
                 teamName: s.team_name,
+                className: s.class_name,
               })),
             }))
             .filter((g) => g.members.length > 0);
@@ -454,6 +455,7 @@ function JudgeSheetsCard({ categories, orgName }) {
               regNo: s.reg_no,
               name: s.name,
               teamName: s.team_name,
+              className: s.class_name,
             })),
         };
       })
