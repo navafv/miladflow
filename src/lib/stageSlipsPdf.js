@@ -42,7 +42,6 @@ function yieldToMainThread() {
 
 export async function generateStageSlipsPDF(
   registrationsByEvent,
-  judgeCount,
   { orgName, filename = "Stage-Sheets" } = {},
 ) {
   const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
@@ -59,10 +58,7 @@ export async function generateStageSlipsPDF(
 
   const events = (registrationsByEvent ?? []).filter(Boolean);
 
-  const sheets = [];
-  events.forEach((ev) => {
-    for (let j = 0; j < judgeCount; j += 1) sheets.push(ev);
-  });
+  const sheets = events;
 
   if (sheets.length === 0) {
     throw new Error("No events/students to generate stage sheets for.");
