@@ -4,10 +4,11 @@ import {
   ensureMalayalamFontFace,
 } from "./pdfFonts.js";
 
-const RASTER_SCALE = 4;
+const RASTER_SCALE = 2;
 const MALAYALAM_RANGE = /[\u0D00-\u0D7F]/;
 const MAX_RASTER_WIDTH_PX = 900;
 const ELLIPSIS = "…";
+const RASTER_JPEG_QUALITY = 0.4;
 
 export function containsMalayalam(text) {
   return MALAYALAM_RANGE.test(text ?? "");
@@ -68,7 +69,7 @@ function truncateToWidth(ctx, text, maxWidth) {
   return text.slice(0, lo) + ELLIPSIS;
 }
 
-function rasterizeLine(text, fontSize, bold, colorRgb) {
+function rasterizeLine(text, fontSize, bold, colorRgb, bgRgb) {
   const ctx = getMeasureCtx();
   const weight = bold ? 700 : 400;
   ctx.font = `${weight} ${fontSize}px "${MALAYALAM_FONT_FAMILY}"`;
@@ -92,11 +93,16 @@ function rasterizeLine(text, fontSize, bold, colorRgb) {
   rctx.scale(RASTER_SCALE, RASTER_SCALE);
   rctx.font = `${weight} ${fontSize}px "${MALAYALAM_FONT_FAMILY}"`;
   rctx.textBaseline = "top";
+  rctx.fillStyle = `rgb(${(bgRgb ?? [255, 255, 255]).join(",")})`;
+  rctx.fillRect(0, 0, width, height);
   rctx.fillStyle = `rgb(${colorRgb.join(",")})`;
-  rctx.clearRect(0, 0, width, height);
   rctx.fillText(safeText, 2, height * 0.12);
 
-  return { dataUrl: canvas.toDataURL("image/png"), width, height };
+  return {
+    dataUrl: canvas.toDataURL("image/jpeg", RASTER_JPEG_QUALITY),
+    width,
+    height,
+  };
 }
 
 export function drawTextLine(
@@ -104,7 +110,7 @@ export function drawTextLine(
   text,
   x,
   y,
-  { fontSize, bold = false, color = [23, 23, 23], align = "left" },
+  { fontSize, bold = false, color = [23, 23, 23], align = "left", bgColor },
 ) {
   if (!text) return 0;
 
@@ -116,11 +122,17 @@ export function drawTextLine(
     return doc.getTextWidth(text);
   }
 
-  const { dataUrl, width, height } = rasterizeLine(text, fontSize, bold, color);
+  const { dataUrl, width, height } = rasterizeLine(
+    text,
+    fontSize,
+    bold,
+    color,
+    bgColor,
+  );
   let imgX = x;
   if (align === "center") imgX = x - width / 2;
   else if (align === "right") imgX = x - width;
-  doc.addImage(dataUrl, "PNG", imgX, y - fontSize * 0.83, width, height);
+  doc.addImage(dataUrl, "JPEG", imgX, y - fontSize * 0.83, width, height);
   return width;
 }
 
@@ -136,12 +148,13 @@ export function drawWrappedText(
     align = "left",
     maxWidth,
     lineHeight,
+    bgColor,
   },
 ) {
   const lh = lineHeight ?? fontSize * 1.18;
   const lines = measureWrap(doc, text, maxWidth, fontSize, bold);
   lines.forEach((line) => {
-    drawTextLine(doc, line, x, y, { fontSize, bold, color, align });
+    drawTextLine(doc, line, x, y, { fontSize, bold, color, align, bgColor });
     y += lh;
   });
   return y;

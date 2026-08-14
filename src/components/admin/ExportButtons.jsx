@@ -1,13 +1,17 @@
 import { useState } from "react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
-import { toCanvas } from "html-to-image";
+import autoTable from "jspdf-autotable";
 import {
-  MALAYALAM_FONT_FAMILY,
   PDF_FONT_NAME,
   ensureMalayalamFontFace,
   registerMalayalamPdfFont,
 } from "../../lib/pdfFonts.js";
+import {
+  containsMalayalam,
+  measureWrap,
+  drawWrappedText,
+} from "../../lib/richText.js";
 import { generateJudgeSheetsPDF } from "../../lib/judgeSheetsPdf.js";
 import { buildExportFilename } from "../../lib/exportFilename.js";
 import { Toast, useToast } from "./Toast.jsx";
@@ -43,16 +47,18 @@ function sanitizeCell(value) {
 }
 
 const PDF_MARGIN_PT = 28;
-const PDF_TABLE_WIDTH_PX = 1100;
-const PIXEL_RATIO = 2;
 const FOOTER_SPACE_PT = 26;
+const TABLE_FONT_SIZE = 9.5;
+const CELL_PADDING = 6;
 
 const INK = [23, 23, 23];
 const MUTED = [110, 118, 128];
 const RULE = [210, 216, 222];
 const BRAND = [16, 145, 105];
+const HEAD_BG = [33, 241, 168];
+const ZEBRA_BG = [244, 246, 248];
+const WHITE = [255, 255, 255];
 
-/** "10 Aug 2026" — used in the footer timestamp. */
 function formatGeneratedDate(date) {
   return date.toLocaleDateString(undefined, {
     day: "numeric",
@@ -61,14 +67,6 @@ function formatGeneratedDate(date) {
   });
 }
 
-/**
- * Joins active filter values into a single "Category: Kiddies  |  Gender:
- * Boys  |  Event: Quran Recitation" line. Accepts either:
- *  - { label, value } objects (preferred — renders "Label: Value"), or
- *  - plain strings (rendered as-is, for callers that already have a
- *    formatted summary).
- * Falsy entries and objects with an empty value are dropped automatically.
- */
 export function buildFilterSummary(filterParts = []) {
   return (filterParts ?? [])
     .filter(Boolean)
@@ -82,43 +80,42 @@ export function buildFilterSummary(filterParts = []) {
     .join("   |   ");
 }
 
-/**
- * Premium letterhead:
- *   Madrassa Name         (large, bold, centered, brand color)
- *   Document Title         (medium, bold, centered)
- *   Active filter summary  (small, muted, centered) — only if present
- *   ── rule ──
- * Every piece of text goes through the registered Noto Sans Malayalam font
- * (see registerMalayalamPdfFont), so Malayalam org names, titles, or filter
- * values render correctly instead of as blank boxes.
- */
 function drawLetterhead(doc, { orgName, title, filterSummary }) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const centerX = pageWidth / 2;
   let y = PDF_MARGIN_PT;
 
   if (orgName) {
-    doc.setFont(PDF_FONT_NAME, "bold");
-    doc.setFontSize(18);
-    doc.setTextColor(...BRAND);
-    doc.text(orgName, centerX, y + 14, { align: "center" });
-    y += 22;
+    y = drawWrappedText(doc, orgName, centerX, y + 14, {
+      fontSize: 18,
+      bold: true,
+      color: BRAND,
+      align: "center",
+      maxWidth: pageWidth - PDF_MARGIN_PT * 2,
+    });
+    y += 8;
   }
 
   if (title) {
-    doc.setFont(PDF_FONT_NAME, "bold");
-    doc.setFontSize(15);
-    doc.setTextColor(...INK);
-    doc.text(title, centerX, y + 11, { align: "center" });
-    y += 19;
+    y = drawWrappedText(doc, title, centerX, y + 11, {
+      fontSize: 15,
+      bold: true,
+      color: INK,
+      align: "center",
+      maxWidth: pageWidth - PDF_MARGIN_PT * 2,
+    });
+    y += 8;
   }
 
   if (filterSummary) {
-    doc.setFont(PDF_FONT_NAME, "normal");
-    doc.setFontSize(11);
-    doc.setTextColor(...MUTED);
-    doc.text(filterSummary, centerX, y + 10, { align: "center" });
-    y += 17;
+    y = drawWrappedText(doc, filterSummary, centerX, y + 10, {
+      fontSize: 11,
+      bold: false,
+      color: MUTED,
+      align: "center",
+      maxWidth: pageWidth - PDF_MARGIN_PT * 2,
+    });
+    y += 7;
   }
 
   y += 6;
@@ -130,11 +127,6 @@ function drawLetterhead(doc, { orgName, title, filterSummary }) {
   return y;
 }
 
-/**
- * Professional footer: "Generated on: 10 Aug 2026" on the left, "Page 1 of
- * 3" on the right, above a thin rule. Drawn once per page after all pages
- * exist so the total page count is known.
- */
 function drawFooter(doc, generatedAt, pageIndex, totalPages) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -161,219 +153,118 @@ function drawFooter(doc, generatedAt, pageIndex, totalPages) {
 }
 
 export function buildExportTableNode({ columns, rows }) {
-  const container = document.createElement("div");
-  container.style.position = "fixed";
-  container.style.top = "0";
-  container.style.left = "0";
-  container.style.zIndex = "-1";
-  container.style.pointerEvents = "none";
-  container.style.width = `${PDF_TABLE_WIDTH_PX}px`;
-  container.style.background = "#ffffff";
-  container.style.fontFamily = `"${MALAYALAM_FONT_FAMILY}", sans-serif`;
-  container.style.color = "#171717";
-
-  const table = document.createElement("table");
-  table.style.width = "100%";
-  table.style.borderCollapse = "collapse";
-  table.style.fontSize = "15px";
-  table.style.lineHeight = "1.5";
-
-  const thead = document.createElement("thead");
-  const headRow = document.createElement("tr");
-  columns.forEach((col) => {
-    const th = document.createElement("th");
-    th.textContent = col.label;
-    th.style.textAlign = "left";
-    th.style.padding = "12px 14px";
-    th.style.background = "#21F1A8";
-    th.style.color = "#171717";
-    th.style.fontWeight = "700";
-    th.style.fontSize = "15px";
-    th.style.border = "1px solid #171717";
-    headRow.appendChild(th);
-  });
-  thead.appendChild(headRow);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  const rowEls = rows.map((row, idx) => {
-    const tr = document.createElement("tr");
-    tr.style.background = idx % 2 === 0 ? "#ffffff" : "#f4f6f8";
-    columns.forEach((col) => {
-      const td = document.createElement("td");
-      td.textContent = sanitizeCell(row[col.key]);
-      td.style.padding = "11px 14px";
-      td.style.border = "1px solid #cbd5e1";
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-    return tr;
-  });
-  table.appendChild(tbody);
-  container.appendChild(table);
-
-  return { container, table, theadEl: thead, rowEls };
+  return { columns, rows };
 }
 
 export async function exportTableToPdf(
-  { container, table, theadEl, rowEls },
+  { columns, rows },
   { orgName, title, filterSummary },
   filename,
 ) {
-  document.body.appendChild(container);
-  try {
-    container.offsetHeight;
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+  const generatedAt = new Date();
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  await registerMalayalamPdfFont(doc);
 
-    const tableRect = table.getBoundingClientRect();
-    const theadHeightPxMeasured =
-      theadEl.getBoundingClientRect().height * PIXEL_RATIO;
-    const rowBoundsPxMeasured = rowEls.map((tr) => {
-      const rect = tr.getBoundingClientRect();
-      return {
-        top: (rect.top - tableRect.top) * PIXEL_RATIO,
-        bottom: (rect.bottom - tableRect.top) * PIXEL_RATIO,
-      };
-    });
+  const contentTopPt = drawLetterhead(doc, { orgName, title, filterSummary });
 
-    const canvas = await toCanvas(table, {
-      pixelRatio: PIXEL_RATIO,
-      backgroundColor: "#ffffff",
-      width: tableRect.width,
-      height: tableRect.height,
-    });
+  const head = [columns.map((col) => col.label)];
+  const body = rows.map((row) =>
+    columns.map((col) => sanitizeCell(row[col.key])),
+  );
 
-    if (canvas.width === 0 || canvas.height === 0) {
-      throw new Error(
-        "The export table rendered with zero size — nothing to capture.",
-      );
-    }
+  autoTable(doc, {
+    head,
+    body,
+    startY: contentTopPt,
+    margin: {
+      left: PDF_MARGIN_PT,
+      right: PDF_MARGIN_PT,
+      top: PDF_MARGIN_PT + 16,
+      bottom: PDF_MARGIN_PT + FOOTER_SPACE_PT,
+    },
+    theme: "grid",
+    styles: {
+      font: PDF_FONT_NAME,
+      fontSize: TABLE_FONT_SIZE,
+      cellPadding: CELL_PADDING,
+      textColor: INK,
+      lineColor: RULE,
+      lineWidth: 0.5,
+      overflow: "linebreak",
+      valign: "top",
+    },
+    headStyles: {
+      fillColor: HEAD_BG,
+      textColor: INK,
+      fontStyle: "bold",
+      fontSize: TABLE_FONT_SIZE,
+      cellPadding: CELL_PADDING,
+    },
+    alternateRowStyles: {
+      fillColor: ZEBRA_BG,
+    },
+    didParseCell: (data) => {
+      const raw = data.cell.raw;
+      if (typeof raw !== "string" || !containsMalayalam(raw)) return;
 
-    const verticalCorrection =
-      tableRect.height > 0
-        ? canvas.height / (tableRect.height * PIXEL_RATIO)
-        : 1;
-    const theadHeightPx = theadHeightPxMeasured * verticalCorrection;
-    const rowBoundsPx = rowBoundsPxMeasured.map(({ top, bottom }) => ({
-      top: top * verticalCorrection,
-      bottom: Math.min(bottom * verticalCorrection, canvas.height),
-    }));
+      data.cell.text = [];
+      data.cell._milad = { malayalam: raw };
 
-    const generatedAt = new Date();
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
-    await registerMalayalamPdfFont(doc);
+      const innerWidth =
+        data.cell.width -
+        data.cell.padding("left") -
+        data.cell.padding("right");
+      const bold = data.section === "head";
+      const lines = measureWrap(doc, raw, innerWidth, TABLE_FONT_SIZE, bold);
+      const lineHeight = TABLE_FONT_SIZE * 1.18;
+      const needed =
+        lines.length * lineHeight +
+        data.cell.padding("top") +
+        data.cell.padding("bottom");
+      if (needed > data.row.height) data.row.height = needed;
+    },
+    didDrawCell: (data) => {
+      const meta = data.cell._milad;
+      if (!meta) return;
 
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const usableWidthPt = pageWidth - PDF_MARGIN_PT * 2;
-    const scale = usableWidthPt / canvas.width;
+      const { cell } = data;
+      const isHead = data.section === "head";
+      const isStripe = !isHead && rows.length > 0 && data.row.index % 2 === 1;
+      const bgColor = isHead ? HEAD_BG : isStripe ? ZEBRA_BG : WHITE;
 
-    const contentTopPt = drawLetterhead(doc, { orgName, title, filterSummary });
-    const page1UsableHeightPt =
-      pageHeight - PDF_MARGIN_PT - FOOTER_SPACE_PT - contentTopPt;
-    const laterPageUsableHeightPt =
-      pageHeight - PDF_MARGIN_PT * 2 - FOOTER_SPACE_PT;
+      const padLeft = cell.padding("left");
+      const padTop = cell.padding("top");
+      const innerWidth = cell.width - padLeft - cell.padding("right");
+      const textX = cell.x + padLeft;
+      let textY = cell.y + padTop + TABLE_FONT_SIZE * 0.85;
 
-    const theadHeightPtAtScale = theadHeightPx * scale;
-    const page1BodyPxAvailable =
-      (page1UsableHeightPt - theadHeightPtAtScale) / scale;
-    const laterPageBodyPxAvailable =
-      (laterPageUsableHeightPt - theadHeightPtAtScale) / scale;
-
-    if (page1BodyPxAvailable <= 0 || laterPageBodyPxAvailable <= 0) {
-      throw new Error(
-        "The page is too small to fit even the table header — try a smaller font or fewer columns.",
-      );
-    }
-
-    const pages = [];
-    let pageStart = 0;
-    let pageHeightPx = 0;
-    for (let i = 0; i < rowBoundsPx.length; i += 1) {
-      const rowHeight = rowBoundsPx[i].bottom - rowBoundsPx[i].top;
-      const limit =
-        pages.length === 0 ? page1BodyPxAvailable : laterPageBodyPxAvailable;
-      if (pageHeightPx > 0 && pageHeightPx + rowHeight > limit) {
-        pages.push({ startIdx: pageStart, endIdx: i - 1 });
-        pageStart = i;
-        pageHeightPx = 0;
+      drawWrappedText(doc, meta.malayalam, textX, textY, {
+        fontSize: TABLE_FONT_SIZE,
+        bold: isHead,
+        color: INK,
+        align: "left",
+        maxWidth: innerWidth,
+        lineHeight: TABLE_FONT_SIZE * 1.18,
+        bgColor,
+      });
+    },
+    didDrawPage: (data) => {
+      if (data.pageNumber > 1 && title) {
+        doc.setFont(PDF_FONT_NAME, "bold");
+        doc.setFontSize(10.5);
+        doc.setTextColor(...MUTED);
+        doc.text(title, PDF_MARGIN_PT, PDF_MARGIN_PT + 8);
       }
-      pageHeightPx += rowHeight;
-    }
-    if (rowBoundsPx.length === 0 || pageStart < rowBoundsPx.length) {
-      pages.push({ startIdx: pageStart, endIdx: rowBoundsPx.length - 1 });
-    }
+    },
+  });
 
-    pages.forEach(({ startIdx, endIdx }, pageIndex) => {
-      const bodyTopPx = rowBoundsPx[startIdx]?.top ?? theadHeightPx;
-      const bodyBottomPx = rowBoundsPx[endIdx]?.bottom ?? theadHeightPx;
-      const bodyHeightPx = Math.max(0, bodyBottomPx - bodyTopPx);
-      const pageCanvasHeightPx = theadHeightPx + bodyHeightPx;
-
-      const pageCanvas = document.createElement("canvas");
-      pageCanvas.width = canvas.width;
-      pageCanvas.height = pageCanvasHeightPx;
-      const ctx = pageCanvas.getContext("2d");
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-
-      ctx.drawImage(
-        canvas,
-        0,
-        0,
-        canvas.width,
-        theadHeightPx,
-        0,
-        0,
-        canvas.width,
-        theadHeightPx,
-      );
-      if (bodyHeightPx > 0) {
-        ctx.drawImage(
-          canvas,
-          0,
-          bodyTopPx,
-          canvas.width,
-          bodyHeightPx,
-          0,
-          theadHeightPx,
-          canvas.width,
-          bodyHeightPx,
-        );
-      }
-
-      if (pageIndex > 0) {
-        doc.addPage();
-        if (title) {
-          doc.setFont(PDF_FONT_NAME, "bold");
-          doc.setFontSize(10.5);
-          doc.setTextColor(...MUTED);
-          doc.text(title, PDF_MARGIN_PT, PDF_MARGIN_PT + 8);
-        }
-      }
-
-      const imageY = pageIndex === 0 ? contentTopPt : PDF_MARGIN_PT + 16;
-      doc.addImage(
-        pageCanvas.toDataURL("image/png"),
-        "PNG",
-        PDF_MARGIN_PT,
-        imageY,
-        usableWidthPt,
-        pageCanvasHeightPx * scale,
-      );
-    });
-
-    const totalPages = pages.length;
-    for (let i = 0; i < totalPages; i += 1) {
-      doc.setPage(i + 1);
-      drawFooter(doc, generatedAt, i, totalPages);
-    }
-
-    doc.save(`${filename}.pdf`);
-  } finally {
-    container.remove();
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i = 0; i < totalPages; i += 1) {
+    doc.setPage(i + 1);
+    drawFooter(doc, generatedAt, i, totalPages);
   }
+
+  doc.save(`${filename}.pdf`);
 }
 
 export default function ExportButtons({
