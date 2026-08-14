@@ -14,10 +14,6 @@ import { buildExportFilename } from "../../lib/exportFilename.js";
 import { ensureMalayalamFontFace } from "../../lib/pdfFonts.js";
 import { generateJudgeSheetsPDF } from "../../lib/judgeSheetsPdf.js";
 
-// Shared helper: drives the exact same PDF pipeline used by ExportButtons
-// (letterhead, pagination, Malayalam font handling) so every card here stays
-// pixel-identical to exports triggered elsewhere in the app, with zero
-// duplicated PDF logic.
 async function downloadTablePdf({
   columns,
   rows,
@@ -69,9 +65,6 @@ const GENDER_OPTIONS = [
   { value: "girls", label: "Girls" },
 ];
 
-// ---------------------------------------------------------------------------
-// Shared card shell — glassmorphism panel that every report card sits inside.
-// ---------------------------------------------------------------------------
 function ReportCard({ icon, title, description, children }) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-white/40 bg-white/60 p-5 shadow-xl shadow-slate-900/5 backdrop-blur-xl transition-all hover:shadow-2xl hover:shadow-[#21F1A8]/10 dark:border-white/10 dark:bg-[#262626]/60">
@@ -149,7 +142,6 @@ function ActionButton({ onClick, disabled, loading, children, primary }) {
   );
 }
 
-// Icon set (kept inline / dependency-free, matching the rest of the admin UI)
 const ICONS = {
   matrix: (
     <svg
@@ -198,14 +190,11 @@ const ICONS = {
   ),
 };
 
-// ---------------------------------------------------------------------------
-// Card 1 — Registration Matrix
-// ---------------------------------------------------------------------------
 function RegistrationMatrixCard({ categories, teams, orgName }) {
   const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [genderFilter, setGenderFilter] = useState(ALL);
   const [teamFilter, setTeamFilter] = useState(ALL);
-  const [loadingKind, setLoadingKind] = useState(null); // "pdf" | "excel" | null
+  const [loadingKind, setLoadingKind] = useState(null);
   const [error, setError] = useState(null);
 
   const filtersReady = categoryFilter !== ALL && genderFilter !== ALL;
@@ -398,9 +387,6 @@ function RegistrationMatrixCard({ categories, teams, orgName }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Card 2 — Judge Scoring Sheets
-// ---------------------------------------------------------------------------
 function JudgeSheetsCard({ categories, orgName }) {
   const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [genderFilter, setGenderFilter] = useState(ALL);
@@ -442,7 +428,11 @@ function JudgeSheetsCard({ categories, orgName }) {
             .map((g) => ({
               groupName: g.group_name,
               teamName: g.team_name,
-              members: (g.students ?? []).map((s) => ({ regNo: s.reg_no })),
+              members: (g.students ?? []).map((s) => ({
+                regNo: s.reg_no,
+                name: s.name,
+                teamName: s.team_name,
+              })),
             }))
             .filter((g) => g.members.length > 0);
           return {
@@ -460,7 +450,11 @@ function JudgeSheetsCard({ categories, orgName }) {
           isGroup: false,
           students: students
             .filter((s) => registeredPairs.has(`${s.id}:${ev.id}`))
-            .map((s) => ({ regNo: s.reg_no })),
+            .map((s) => ({
+              regNo: s.reg_no,
+              name: s.name,
+              teamName: s.team_name,
+            })),
         };
       })
       .filter((ev) =>
@@ -564,9 +558,6 @@ function JudgeSheetsCard({ categories, orgName }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Card 3 — Results & Placements
-// ---------------------------------------------------------------------------
 function ResultsCard({ categories, events, orgName }) {
   const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [allResults, setAllResults] = useState(true);

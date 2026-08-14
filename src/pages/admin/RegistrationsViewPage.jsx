@@ -222,7 +222,11 @@ export default function RegistrationsViewPage() {
             .map((g) => ({
               groupName: g.group_name,
               teamName: g.team_name,
-              members: (g.students ?? []).map((s) => ({ regNo: s.reg_no })),
+              members: (g.students ?? []).map((s) => ({
+                regNo: s.reg_no,
+                name: s.name,
+                teamName: s.team_name,
+              })),
             }))
             .filter((g) => g.members.length > 0);
 
@@ -242,7 +246,11 @@ export default function RegistrationsViewPage() {
           isGroup: false,
           students: matrix.students
             .filter((s) => isRegistered(s.id, ev.id))
-            .map((s) => ({ regNo: s.reg_no })),
+            .map((s) => ({
+              regNo: s.reg_no,
+              name: s.name,
+              teamName: s.team_name,
+            })),
         };
       })
       .filter((ev) =>

@@ -13,6 +13,7 @@ import {
   drawWrappedText,
 } from "../../lib/richText.js";
 import { generateJudgeSheetsPDF } from "../../lib/judgeSheetsPdf.js";
+import { generateStageSlipsPDF } from "../../lib/stageSlipsPdf.js";
 import { buildExportFilename } from "../../lib/exportFilename.js";
 import { Toast, useToast } from "./Toast.jsx";
 
@@ -285,6 +286,7 @@ export default function ExportButtons({
   const [judgeCount, setJudgeCount] = useState(2);
   const [judgeGenerating, setJudgeGenerating] = useState(false);
   const [judgeError, setJudgeError] = useState(null);
+  const [slipsGenerating, setSlipsGenerating] = useState(false);
   const { toast, showToast, dismiss } = useToast();
 
   const handleGenerateJudgeSheets = async () => {
@@ -304,6 +306,26 @@ export default function ExportButtons({
       showToast("Failed to generate PDF. Please try again.", "error");
     } finally {
       setJudgeGenerating(false);
+    }
+  };
+
+  const handleGenerateStageSlips = async () => {
+    setSlipsGenerating(true);
+    try {
+      await ensureMalayalamFontFace();
+      await generateStageSlipsPDF(judgeSheetEvents, {
+        orgName,
+        filename: `${filename}-Stage-Slips`,
+      });
+      showToast("Stage slips generated successfully.", "success");
+    } catch (err) {
+      console.error("Stage slip PDF generation failed:", err);
+      showToast(
+        err?.message ?? "Failed to generate PDF. Please try again.",
+        "error",
+      );
+    } finally {
+      setSlipsGenerating(false);
     }
   };
 
@@ -385,6 +407,16 @@ export default function ExportButtons({
           >
             <DownloadIcon />
             Judge Sheets
+          </button>
+        )}
+        {judgeSheetEvents.length > 0 && (
+          <button
+            onClick={handleGenerateStageSlips}
+            disabled={slipsGenerating}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-100 hover:text-[#171717] disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-[#262626] dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-[#21F1A8]"
+          >
+            <DownloadIcon />
+            {slipsGenerating ? "Generating Slips..." : "Stage Slip"}
           </button>
         )}
       </div>
