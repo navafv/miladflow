@@ -68,7 +68,7 @@ export default function App() {
           />
           <Route path="schedule" element={<AdminSchedulePage />} />
           <Route path="results" element={<AdminResultsPage />} />
-          {/* <Route path="reports" element={<ReportsPage />} /> */}
+          <Route path="reports" element={<ReportsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
 

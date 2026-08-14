@@ -6,7 +6,7 @@ const SKELETON_COUNT = 8;
 
 export default function SubscribedMadrassasMarquee() {
   const { data, loading, error } = usePublicResource("/public/madrassas/");
-  const madrassas = Array.isArray(data) ? data : [];
+  const madrassas = Array.isArray(data) ? data : (data?.results ?? []);
 
   if (!loading && (error || madrassas.length === 0)) return null;
 
