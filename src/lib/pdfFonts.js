@@ -3,7 +3,10 @@ import notoMalayalamBoldUrl from "../assets/fonts/NotoSansMalayalam-Bold.ttf?url
 
 export const MALAYALAM_FONT_FAMILY = "MiladFlow Export Malayalam";
 
-export const PDF_FONT_NAME = "NotoSansMalayalam";
+const MALAYALAM_PDF_FONT_NAME = "NotoSansMalayalam";
+const FALLBACK_PDF_FONT_NAME = "helvetica";
+
+export let PDF_FONT_NAME = MALAYALAM_PDF_FONT_NAME;
 
 const STYLE_TAG_ATTR = "data-milad-export-font";
 
@@ -33,7 +36,12 @@ function loadFontBase64() {
     base64Promise = Promise.all([
       fetchAsBase64(notoMalayalamRegularUrl),
       fetchAsBase64(notoMalayalamBoldUrl),
-    ]).then(([regular, bold]) => ({ regular, bold }));
+    ])
+      .then(([regular, bold]) => ({ regular, bold }))
+      .catch((err) => {
+        base64Promise = null;
+        throw err;
+      });
   }
   return base64Promise;
 }
@@ -41,48 +49,75 @@ function loadFontBase64() {
 export function ensureMalayalamFontFace() {
   if (!cssReadyPromise) {
     cssReadyPromise = (async () => {
-      const { regular, bold } = await loadFontBase64();
+      try {
+        const { regular, bold } = await loadFontBase64();
 
-      if (!document.querySelector(`style[${STYLE_TAG_ATTR}]`)) {
-        const style = document.createElement("style");
-        style.setAttribute(STYLE_TAG_ATTR, "true");
-        style.textContent = `
-          @font-face {
-            font-family: "${MALAYALAM_FONT_FAMILY}";
-            src: url(data:font/ttf;base64,${regular}) format("truetype");
-            font-weight: 400;
-            font-style: normal;
-            font-display: block;
-          }
-          @font-face {
-            font-family: "${MALAYALAM_FONT_FAMILY}";
-            src: url(data:font/ttf;base64,${bold}) format("truetype");
-            font-weight: 700;
-            font-style: normal;
-            font-display: block;
-          }
-        `;
-        document.head.appendChild(style);
+        if (!document.querySelector(`style[${STYLE_TAG_ATTR}]`)) {
+          const style = document.createElement("style");
+          style.setAttribute(STYLE_TAG_ATTR, "true");
+          style.textContent = `
+            @font-face {
+              font-family: "${MALAYALAM_FONT_FAMILY}";
+              src: url(data:font/ttf;base64,${regular}) format("truetype");
+              font-weight: 400;
+              font-style: normal;
+              font-display: block;
+            }
+            @font-face {
+              font-family: "${MALAYALAM_FONT_FAMILY}";
+              src: url(data:font/ttf;base64,${bold}) format("truetype");
+              font-weight: 700;
+              font-style: normal;
+              font-display: block;
+            }
+          `;
+          document.head.appendChild(style);
+        }
+
+        await Promise.all([
+          document.fonts.load(`400 16px "${MALAYALAM_FONT_FAMILY}"`),
+          document.fonts.load(`700 16px "${MALAYALAM_FONT_FAMILY}"`),
+        ]);
+        await document.fonts.ready;
+      } catch (err) {
+        console.warn(
+          "MiladFlow: could not load the Malayalam export font — " +
+            "Malayalam text in exported posters/tables may not render " +
+            "correctly, but the export will continue.",
+          err,
+        );
+        cssReadyPromise = null;
       }
-
-      await Promise.all([
-        document.fonts.load(`400 16px "${MALAYALAM_FONT_FAMILY}"`),
-        document.fonts.load(`700 16px "${MALAYALAM_FONT_FAMILY}"`),
-      ]);
-      await document.fonts.ready;
     })();
   }
   return cssReadyPromise;
 }
 
 export async function registerMalayalamPdfFont(doc) {
-  const { regular, bold } = await loadFontBase64();
+  try {
+    const { regular, bold } = await loadFontBase64();
 
-  doc.addFileToVFS("NotoSansMalayalam-Regular.ttf", regular);
-  doc.addFont("NotoSansMalayalam-Regular.ttf", PDF_FONT_NAME, "normal");
+    doc.addFileToVFS("NotoSansMalayalam-Regular.ttf", regular);
+    doc.addFont(
+      "NotoSansMalayalam-Regular.ttf",
+      MALAYALAM_PDF_FONT_NAME,
+      "normal",
+    );
 
-  doc.addFileToVFS("NotoSansMalayalam-Bold.ttf", bold);
-  doc.addFont("NotoSansMalayalam-Bold.ttf", PDF_FONT_NAME, "bold");
+    doc.addFileToVFS("NotoSansMalayalam-Bold.ttf", bold);
+    doc.addFont("NotoSansMalayalam-Bold.ttf", MALAYALAM_PDF_FONT_NAME, "bold");
+
+    PDF_FONT_NAME = MALAYALAM_PDF_FONT_NAME;
+  } catch (err) {
+    console.warn(
+      "MiladFlow: could not load the Malayalam PDF font — falling back " +
+        "to the built-in Helvetica font for this export. English text " +
+        "and layout are unaffected; Malayalam text may not render " +
+        "correctly.",
+      err,
+    );
+    PDF_FONT_NAME = FALLBACK_PDF_FONT_NAME;
+  }
 
   doc.setFont(PDF_FONT_NAME, "normal");
 }

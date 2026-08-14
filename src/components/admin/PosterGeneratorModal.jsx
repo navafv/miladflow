@@ -51,9 +51,10 @@ export default function PosterGeneratorModal({
   const { toast, showToast, dismiss } = useToast();
   const captureCacheRef = useRef({ key: null, dataUrl: null });
 
-  const winsOnly = (winningEvents || []).filter(
-    (w) => w && (w.place === 1 || w.place === 2 || w.place === 3),
-  );
+  const winsOnly = (winningEvents || []).filter((w) => {
+    const place = Number(w?.place);
+    return w && (place === 1 || place === 2 || place === 3);
+  });
   const eligible = winsOnly.length > 0;
 
   useEffect(() => {

@@ -34,6 +34,11 @@ const EVENT_LINE_HEIGHT = EVENT_FONT_SIZE * 1.18;
 const JUDGE_BLOCK_H = 21;
 const TABLE_HEAD_HEIGHT_APPROX = 11 * 1.3 + CELL_PADDING * 2;
 const FIT_SAFETY_MARGIN = 6;
+const YIELD_EVERY_N_ITEMS = 8;
+
+function yieldToMainThread() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 export async function generateJudgeSheetsPDF(
   registrationsByEvent,
@@ -51,7 +56,7 @@ export async function generateJudgeSheetsPDF(
   const columnWidth =
     (usableWidth - GUTTER_PT * (SHEETS_PER_PAGE - 1)) / SHEETS_PER_PAGE;
   const usableHeight = pageHeight - MARGIN_PT * 2;
-  
+
   const events = (registrationsByEvent ?? []).filter(Boolean);
 
   const sheets = [];
@@ -86,7 +91,8 @@ export async function generateJudgeSheetsPDF(
     return { left, pageNum };
   };
 
-  sheets.forEach((ev) => {
+  for (let i = 0; i < sheets.length; i += 1) {
+    const ev = sheets[i];
     const detailMaxWidth = columnWidth * 0.32 - CELL_PADDING * 2;
     const headerHeight = measureHeaderHeight(doc, ev, columnWidth, orgName);
     const eventRows = buildEventRows(doc, ev, detailMaxWidth);
@@ -111,11 +117,17 @@ export async function generateJudgeSheetsPDF(
         continuation: chunkIndex > 0,
       });
     });
-  });
+
+    if (i > 0 && i % YIELD_EVERY_N_ITEMS === 0) {
+      await yieldToMainThread();
+    }
+  }
 
   doc.setDrawColor(...RULE);
   doc.setLineWidth(0.75);
-  gridPageNumbers.forEach((p) => {
+  const pageNumbers = [...gridPageNumbers];
+  for (let i = 0; i < pageNumbers.length; i += 1) {
+    const p = pageNumbers[i];
     doc.setPage(p);
     doc.setLineDashPattern([4, 3], 0);
     for (let c = 1; c < SHEETS_PER_PAGE; c += 1) {
@@ -123,7 +135,11 @@ export async function generateJudgeSheetsPDF(
       doc.line(x, MARGIN_PT * 0.5, x, pageHeight - MARGIN_PT * 0.5);
     }
     doc.setLineDashPattern([], 0);
-  });
+
+    if (i > 0 && i % YIELD_EVERY_N_ITEMS === 0) {
+      await yieldToMainThread();
+    }
+  }
 
   doc.save(`${filename}.pdf`);
 }
@@ -388,12 +404,8 @@ function drawGridSheet(
     head: [["Sl No", "Student / Team", "Code", "Score", "Remarks"]],
     body: rows,
     startY: y,
-    // Pin the table to this column's slot only — never let it stretch
-    // across the page.
     margin: { left, right: pageWidth - left - width, top, bottom: top },
     tableWidth: width,
-    // Chunks are pre-sized to fit the slot, so autoTable should never need
-    // to break this table onto a new page itself.
     pageBreak: "avoid",
     theme: "grid",
     styles: {

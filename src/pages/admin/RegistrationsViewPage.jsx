@@ -209,11 +209,8 @@ export default function RegistrationsViewPage() {
 
   const judgeSheetEvents = useMemo(() => {
     if (!matrix) return [];
-    const categoryName =
-      categories.find((c) => String(c.id) === String(categoryFilter))?.name ??
-      (categoryFilter !== ALL ? categoryFilter : null);
-    const genderLabel =
-      GENDER_OPTIONS.find((g) => g.value === genderFilter)?.label ?? null;
+    const categoryName = selectedFilterNames?.categoryName ?? null;
+    const genderLabel = selectedFilterNames?.genderLabel ?? null;
 
     return matrix.events
       .map((ev) => {
@@ -251,7 +248,7 @@ export default function RegistrationsViewPage() {
       .filter((ev) =>
         ev.isGroup ? ev.groups.length > 0 : ev.students.length > 0,
       );
-  }, [matrix, categories, categoryFilter, genderFilter]);
+  }, [matrix, selectedFilterNames]);
 
   const [auditRows, setAuditRows] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);

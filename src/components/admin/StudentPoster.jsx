@@ -180,6 +180,7 @@ const StudentPoster = forwardRef(function StudentPoster(
     student.team?.name ||
     (typeof student.team === "string" ? student.team : null);
   const sortedWins = [...(winningEvents || [])]
+    .map((w) => (w ? { ...w, place: Number(w.place) } : w))
     .filter((w) => w && PLACE_BADGE[w.place])
     .sort((a, b) => a.place - b.place);
 
