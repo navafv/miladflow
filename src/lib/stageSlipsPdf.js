@@ -1,5 +1,4 @@
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { PDF_FONT_NAME, registerMalayalamPdfFont } from "./pdfFonts.js";
 import {
   ensureMalayalamFontFace,
@@ -24,6 +23,9 @@ const DETAIL_FONT_SIZE = 10.5;
 const DETAIL_LINE_HEIGHT = DETAIL_FONT_SIZE * 1.18;
 const CELL_PADDING = 4;
 
+const HEAD_FONT_SIZE = 11;
+const TABLE_HEAD_HEIGHT = HEAD_FONT_SIZE * 1.3 + CELL_PADDING * 2;
+
 const ORG_FONT_SIZE = 13;
 const ORG_LINE_HEIGHT = ORG_FONT_SIZE * 1.18;
 const SUBTITLE_FONT_SIZE = 11;
@@ -32,12 +34,18 @@ const EVENT_FONT_SIZE = 16;
 const EVENT_LINE_HEIGHT = EVENT_FONT_SIZE * 1.18;
 
 const JUDGE_BLOCK_H = 21;
-const TABLE_HEAD_HEIGHT_APPROX = 11 * 1.3 + CELL_PADDING * 2;
 const FIT_SAFETY_MARGIN = 6;
 const YIELD_EVERY_N_ITEMS = 8;
 
+const COL_FRACTIONS = [0.12, 0.18, 0.32, 0.16, 0.22];
+const COL_LABELS = ["Sl No", "Reg No", "Student Name", "Class", "Team"];
+
 function yieldToMainThread() {
   return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function computeColWidths(width) {
+  return COL_FRACTIONS.map((f) => f * width);
 }
 
 export async function generateStageSlipsPDF(
@@ -55,9 +63,9 @@ export async function generateStageSlipsPDF(
   const columnWidth =
     (usableWidth - GUTTER_PT * (SHEETS_PER_PAGE - 1)) / SHEETS_PER_PAGE;
   const usableHeight = pageHeight - MARGIN_PT * 2;
+  const colWidths = computeColWidths(columnWidth);
 
   const events = (registrationsByEvent ?? []).filter(Boolean);
-
   const sheets = events;
 
   if (sheets.length === 0) {
@@ -89,25 +97,20 @@ export async function generateStageSlipsPDF(
 
   for (let i = 0; i < sheets.length; i += 1) {
     const ev = sheets[i];
-    const detailMaxWidth = columnWidth * 0.32 - CELL_PADDING * 2;
     const headerHeight = measureHeaderHeight(doc, ev, columnWidth, orgName);
-    const eventRows = buildEventRows(doc, ev, detailMaxWidth);
+    const eventRows = buildEventRows(doc, ev, colWidths);
 
     const availablePerSlot =
-      usableHeight -
-      headerHeight -
-      TABLE_HEAD_HEIGHT_APPROX -
-      FIT_SAFETY_MARGIN;
+      usableHeight - headerHeight - TABLE_HEAD_HEIGHT - FIT_SAFETY_MARGIN;
 
     const chunks = chunkRowsToFit(eventRows, availablePerSlot);
 
     chunks.forEach((chunkRows, chunkIndex) => {
       const { left } = placeSlot();
-      drawGridSheet(doc, ev, chunkRows, {
+      drawGridSheet(doc, ev, chunkRows, colWidths, {
         top: MARGIN_PT,
         left,
         width: columnWidth,
-        height: usableHeight,
         pageWidth,
         orgName,
         continuation: chunkIndex > 0,
@@ -182,17 +185,30 @@ function buildSubtitle(ev) {
   return parts.filter(Boolean).join(" · ");
 }
 
-function buildEventRows(doc, ev, detailMaxWidth) {
+function cellLines(doc, text, colWidth, bold = false) {
+  const maxWidth = Math.max(colWidth - CELL_PADDING * 2, 1);
+  return measureWrap(doc, text, maxWidth, DETAIL_FONT_SIZE, bold);
+}
+
+function buildEventRows(doc, ev, colWidths) {
   if (!isGroupEvent(ev)) {
     const students = (ev.students ?? []).filter(Boolean);
-    return students.map((s, idx) => ({
-      slNo: String(idx + 1),
-      isGroup: false,
-      regNo: studentRegNo(s),
-      name: studentName(s),
-      className: studentClass(s),
-      team: studentTeam(s),
-    }));
+    return students.map((s, idx) => {
+      const cells = [
+        cellLines(doc, String(idx + 1), colWidths[0]),
+        cellLines(doc, studentRegNo(s), colWidths[1]),
+        cellLines(doc, studentName(s), colWidths[2]),
+        cellLines(doc, studentClass(s), colWidths[3]),
+        cellLines(doc, studentTeam(s), colWidths[4]),
+      ];
+      const maxLines = Math.max(1, ...cells.map((c) => c.length));
+      return {
+        slNo: String(idx + 1),
+        isGroup: false,
+        cells,
+        maxLines,
+      };
+    });
   }
 
   const groups = (ev.groups ?? []).filter(Boolean);
@@ -200,21 +216,19 @@ function buildEventRows(doc, ev, detailMaxWidth) {
     const groupName =
       g.groupName?.trim() || g.teamName?.trim() || "Unnamed Group";
 
-    const groupNameLines = measureWrap(
+    const groupNameLines = cellLines(
       doc,
       groupName,
-      detailMaxWidth,
-      DETAIL_FONT_SIZE,
+      colWidths[DETAIL_COL_INDEX],
       true,
     );
     const memberLines = (g.members ?? [])
       .filter(Boolean)
       .flatMap((m) =>
-        measureWrap(
+        cellLines(
           doc,
           `- ${formatRegNoLine(m)} · ${studentName(m)}`,
-          detailMaxWidth,
-          DETAIL_FONT_SIZE,
+          colWidths[DETAIL_COL_INDEX],
           false,
         ),
       );
@@ -231,9 +245,12 @@ function buildEventRows(doc, ev, detailMaxWidth) {
 
 function rowHeightOf(r) {
   const singleLineRowH = DETAIL_FONT_SIZE * 1.3 + CELL_PADDING * 2;
-  if (!r.isGroup) return singleLineRowH;
-  const groupRowH = r.totalLines * DETAIL_LINE_HEIGHT + CELL_PADDING * 2;
-  return Math.max(groupRowH, singleLineRowH);
+  if (r.isGroup) {
+    const groupRowH = r.totalLines * DETAIL_LINE_HEIGHT + CELL_PADDING * 2;
+    return Math.max(groupRowH, singleLineRowH);
+  }
+  const linesRowH = r.maxLines * DETAIL_LINE_HEIGHT + CELL_PADDING * 2;
+  return Math.max(linesRowH, singleLineRowH);
 }
 
 function chunkRowsToFit(eventRows, availableHeight) {
@@ -286,64 +303,101 @@ function measureHeaderHeight(doc, ev, width, orgName) {
   return h;
 }
 
-function didDrawGroupCell(doc, data, chunkRows) {
-  if (data.section !== "body" || data.column.index !== DETAIL_COL_INDEX) return;
-  const meta = chunkRows[data.row.index];
-  if (!meta || !meta.isGroup) return;
-
-  const { cell } = data;
-
-  doc.setFillColor(...WHITE);
-  doc.rect(
-    cell.x + 0.3,
-    cell.y + 0.3,
-    cell.width - 0.6,
-    cell.height - 0.6,
-    "F",
-  );
+function drawTableHead(doc, left, y, colWidths, width) {
+  doc.setFillColor(...HEAD_BG);
+  doc.rect(left, y, width, TABLE_HEAD_HEIGHT, "F");
   doc.setDrawColor(...RULE);
   doc.setLineWidth(0.5);
-  doc.rect(cell.x, cell.y, cell.width, cell.height, "S");
 
-  const padLeft = cell.padding("left");
-  const padTop = cell.padding("top");
-  let textY = cell.y + padTop + DETAIL_FONT_SIZE * 0.85;
-  const textX = cell.x + padLeft;
-
-  meta.groupNameLines.forEach((line) => {
-    drawTextLine(doc, line, textX, textY, {
-      fontSize: DETAIL_FONT_SIZE,
-      bold: true,
-      color: INK,
-      align: "left",
-    });
-    textY += DETAIL_LINE_HEIGHT;
+  let x = left;
+  COL_LABELS.forEach((label, i) => {
+    doc.rect(x, y, colWidths[i], TABLE_HEAD_HEIGHT, "S");
+    drawTextLine(
+      doc,
+      label,
+      x + CELL_PADDING,
+      y + CELL_PADDING + HEAD_FONT_SIZE * 0.85,
+      {
+        fontSize: HEAD_FONT_SIZE,
+        bold: true,
+        color: INK,
+        align: "left",
+      },
+    );
+    x += colWidths[i];
   });
 
-  meta.memberLines.forEach((line) => {
-    drawTextLine(doc, line, textX, textY, {
-      fontSize: DETAIL_FONT_SIZE,
-      bold: false,
-      color: INK,
-      align: "left",
-    });
-    textY += DETAIL_LINE_HEIGHT;
-  });
+  return y + TABLE_HEAD_HEIGHT;
 }
 
-function didParseGroupRowHeight(data, chunkRows) {
-  if (data.section !== "body" || data.column.index !== DETAIL_COL_INDEX) return;
-  const meta = chunkRows[data.row.index];
-  if (!meta || !meta.isGroup) return;
+function drawTableRow(doc, row, left, y, colWidths, rowHeight) {
+  // Cell backgrounds + borders first.
+  let x = left;
+  doc.setDrawColor(...RULE);
+  doc.setLineWidth(0.5);
+  colWidths.forEach((w) => {
+    doc.setFillColor(...WHITE);
+    doc.rect(x, y, w, rowHeight, "F");
+    doc.rect(x, y, w, rowHeight, "S");
+    x += w;
+  });
 
-  const needed = meta.totalLines * DETAIL_LINE_HEIGHT + CELL_PADDING * 2;
-  if (needed > data.row.height) data.row.height = needed;
+  if (row.isGroup) {
+    drawTextLine(
+      doc,
+      row.slNo,
+      left + CELL_PADDING,
+      y + CELL_PADDING + DETAIL_FONT_SIZE * 0.85,
+      { fontSize: DETAIL_FONT_SIZE, bold: false, color: INK, align: "left" },
+    );
+
+    const detailX = left + colWidths[0] + colWidths[1] + CELL_PADDING;
+    let textY = y + CELL_PADDING + DETAIL_FONT_SIZE * 0.85;
+
+    row.groupNameLines.forEach((line) => {
+      drawTextLine(doc, line, detailX, textY, {
+        fontSize: DETAIL_FONT_SIZE,
+        bold: true,
+        color: INK,
+        align: "left",
+      });
+      textY += DETAIL_LINE_HEIGHT;
+    });
+
+    row.memberLines.forEach((line) => {
+      drawTextLine(doc, line, detailX, textY, {
+        fontSize: DETAIL_FONT_SIZE,
+        bold: false,
+        color: INK,
+        align: "left",
+      });
+      textY += DETAIL_LINE_HEIGHT;
+    });
+    return;
+  }
+
+  let cx = left;
+  row.cells.forEach((lines, i) => {
+    const textX = cx + CELL_PADDING;
+    let textY = y + CELL_PADDING + DETAIL_FONT_SIZE * 0.85;
+    lines.forEach((line) => {
+      drawTextLine(doc, line, textX, textY, {
+        fontSize: DETAIL_FONT_SIZE,
+        bold: false,
+        color: INK,
+        align: "left",
+      });
+      textY += DETAIL_LINE_HEIGHT;
+    });
+    cx += colWidths[i];
+  });
 }
 
 function drawGridSheet(
   doc,
   ev,
   chunkRows,
+  colWidths,
   { top, left, width, pageWidth, orgName, continuation = false },
 ) {
   let y = top + 12;
@@ -401,50 +455,11 @@ function drawGridSheet(
   doc.line(left, y + 6, left + width, y + 6);
   y += 16;
 
-  const detailColWidth = width * 0.32;
+  y = drawTableHead(doc, left, y, colWidths, width);
 
-  const rows = chunkRows.map((r) =>
-    r.isGroup
-      ? [r.slNo, "", "", "", ""]
-      : [r.slNo, r.regNo, r.name, r.className, r.team],
-  );
-
-  autoTable(doc, {
-    head: [["Sl No", "Reg No", "Student Name", "Class", "Team"]],
-    body: rows,
-    startY: y,
-    margin: { left, right: pageWidth - left - width, top, bottom: top },
-    tableWidth: width,
-    pageBreak: "avoid",
-    theme: "grid",
-    styles: {
-      font: PDF_FONT_NAME,
-      fontSize: DETAIL_FONT_SIZE,
-      cellPadding: CELL_PADDING,
-      textColor: INK,
-      lineColor: RULE,
-      lineWidth: 0.5,
-      overflow: "linebreak",
-      valign: "top",
-    },
-    headStyles: {
-      fillColor: HEAD_BG,
-      textColor: INK,
-      fontStyle: "bold",
-      fontSize: 11,
-      cellPadding: CELL_PADDING,
-    },
-    bodyStyles: {
-      fontSize: DETAIL_FONT_SIZE,
-      cellPadding: CELL_PADDING,
-    },
-    columnStyles: {
-      0: { cellWidth: width * 0.12 },
-      1: { cellWidth: width * 0.18 },
-      2: { cellWidth: detailColWidth },
-      3: { cellWidth: width * 0.16 },
-    },
-    didParseCell: (data) => didParseGroupRowHeight(data, chunkRows),
-    didDrawCell: (data) => didDrawGroupCell(doc, data, chunkRows),
+  chunkRows.forEach((row) => {
+    const h = rowHeightOf(row);
+    drawTableRow(doc, row, left, y, colWidths, h);
+    y += h;
   });
 }
