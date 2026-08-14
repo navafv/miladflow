@@ -17,8 +17,26 @@ export default function SeoHead({
   type = "website",
   noIndex = false,
 }) {
-  const fullTitle = rawTitle || (title ? `${title} | ${SITE_NAME}` : DEFAULT_TITLE);
+  const fullTitle =
+    rawTitle || (title ? `${title} | ${SITE_NAME}` : DEFAULT_TITLE);
   const url = `${SITE_URL}${path === "/" ? "" : path}`;
+
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: SITE_NAME,
+    url: SITE_URL,
+    description: DEFAULT_DESCRIPTION,
+    applicationCategory: "EventManagementApplication",
+    operatingSystem: "Web",
+    offers: {
+      "@type": "Offer",
+      price: "999",
+      priceCurrency: "INR",
+      description:
+        "Introductory pricing for one Madrassa's Milad-un-Nabi festival",
+    },
+  };
 
   return (
     <Helmet>
@@ -45,6 +63,10 @@ export default function SeoHead({
       <meta name="twitter:title" content={fullTitle} />
       <meta name="twitter:description" content={description} />
       <meta name="twitter:image" content={image} />
+
+      <script type="application/ld+json">
+        {JSON.stringify(structuredData)}
+      </script>
     </Helmet>
   );
 }

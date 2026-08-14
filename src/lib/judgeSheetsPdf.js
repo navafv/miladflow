@@ -51,9 +51,11 @@ export async function generateJudgeSheetsPDF(
   const columnWidth =
     (usableWidth - GUTTER_PT * (SHEETS_PER_PAGE - 1)) / SHEETS_PER_PAGE;
   const usableHeight = pageHeight - MARGIN_PT * 2;
+  
+  const events = (registrationsByEvent ?? []).filter(Boolean);
 
   const sheets = [];
-  registrationsByEvent.forEach((ev) => {
+  events.forEach((ev) => {
     for (let j = 0; j < judgeCount; j += 1) sheets.push(ev);
   });
 
@@ -61,9 +63,6 @@ export async function generateJudgeSheetsPDF(
     throw new Error("No events/students to generate judge sheets for.");
   }
 
-  // Slot cursor: 0..SHEETS_PER_PAGE-1. jsPDF already gives us page 1 for
-  // free, so we must NOT call doc.addPage() before the very first slot is
-  // drawn — we only add a page once we've wrapped past the last column.
   let slot = 0;
   let needsNewPage = false;
   const gridPageNumbers = new Set();
@@ -140,11 +139,11 @@ function isGroupEvent(ev) {
 }
 
 function formatRegNo(s) {
-  return s.regNo ? s.regNo : "—";
+  return s?.regNo ? s.regNo : "—";
 }
 
 function formatRegNoLine(s) {
-  return s.regNo ? `Reg: ${s.regNo}` : "Reg: —";
+  return s?.regNo ? `Reg: ${s.regNo}` : "Reg: —";
 }
 
 function buildSubtitle(ev) {
@@ -155,7 +154,7 @@ function buildSubtitle(ev) {
 
 function buildEventRows(doc, ev, detailMaxWidth) {
   if (!isGroupEvent(ev)) {
-    const students = ev.students ?? [];
+    const students = (ev.students ?? []).filter(Boolean);
     return students.map((s, idx) => ({
       slNo: String(idx + 1),
       isGroup: false,
@@ -163,7 +162,7 @@ function buildEventRows(doc, ev, detailMaxWidth) {
     }));
   }
 
-  const groups = ev.groups ?? [];
+  const groups = (ev.groups ?? []).filter(Boolean);
   return groups.map((g, idx) => {
     const groupName =
       g.groupName?.trim() || g.teamName?.trim() || "Unnamed Group";
@@ -175,15 +174,17 @@ function buildEventRows(doc, ev, detailMaxWidth) {
       DETAIL_FONT_SIZE,
       true,
     );
-    const memberLines = (g.members ?? []).flatMap((m) =>
-      measureWrap(
-        doc,
-        `- ${formatRegNoLine(m)}`,
-        detailMaxWidth,
-        DETAIL_FONT_SIZE,
-        false,
-      ),
-    );
+    const memberLines = (g.members ?? [])
+      .filter(Boolean)
+      .flatMap((m) =>
+        measureWrap(
+          doc,
+          `- ${formatRegNoLine(m)}`,
+          detailMaxWidth,
+          DETAIL_FONT_SIZE,
+          false,
+        ),
+      );
 
     return {
       slNo: String(idx + 1),
@@ -246,7 +247,7 @@ function measureHeaderHeight(doc, ev, width, orgName) {
 
   const eventLines = measureWrap(
     doc,
-    ev.eventName,
+    ev.eventName || "Untitled Event",
     width,
     EVENT_FONT_SIZE,
     true,
@@ -353,7 +354,7 @@ function drawGridSheet(
     y += 4;
   }
 
-  y = drawWrappedText(doc, ev.eventName, centerX, y, {
+  y = drawWrappedText(doc, ev.eventName || "Untitled Event", centerX, y, {
     fontSize: EVENT_FONT_SIZE,
     bold: true,
     color: INK,

@@ -589,15 +589,22 @@ function LatestResults({ groupedResults }) {
 export default function LiveTvDashboard() {
   const { slug } = useParams();
 
-  const { data: festival, notFound } = usePublicPoll(
-    slug ? `/public/${slug}/` : null,
-  );
+  const {
+    data: festival,
+    notFound,
+    loading: festivalLoading,
+  } = usePublicPoll(slug ? `/public/${slug}/` : null);
+
+  const festivalConfirmed = !festivalLoading && !notFound && festival != null;
+
   const leaderboard = usePublicPoll(
-    slug ? `/public/${slug}/leaderboard/` : null,
+    slug && festivalConfirmed ? `/public/${slug}/leaderboard/` : null,
   );
-  const schedule = usePublicPoll(slug ? `/public/${slug}/schedule/` : null);
+  const schedule = usePublicPoll(
+    slug && festivalConfirmed ? `/public/${slug}/schedule/` : null,
+  );
   const results = usePublicPoll(
-    slug ? `/public/${slug}/results/?page_size=100` : null,
+    slug && festivalConfirmed ? `/public/${slug}/results/?page_size=100` : null,
   );
 
   const teams = useMemo(() => {

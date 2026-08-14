@@ -36,6 +36,11 @@ tokenStorage.onTokenChange(() => {
   setState({ hasRefresh: Boolean(tokenStorage.getRefreshToken()) });
 });
 
+tokenStorage.onForcedLogout(() => {
+  clearResourceCache();
+  setState({ hasRefresh: false, me: null, status: "ready" });
+});
+
 export async function login(email, password) {
   const data = await apiClient.post(
     "/auth/login/",
@@ -49,6 +54,7 @@ export async function login(email, password) {
   }
 
   tokenStorage.setTokens({ access, refresh });
+  clearResourceCache();
   setState({
     hasRefresh: true,
     me: data?.user ?? null,
@@ -78,6 +84,9 @@ export async function hydrate() {
   }
   setState({ status: "loading" });
   try {
+    if (!tokenStorage.getAccessToken()) {
+      await apiClient.refreshAccessToken?.();
+    }
     const me = await apiClient.get("/auth/me/");
     setState({ me, status: "ready" });
   } catch {

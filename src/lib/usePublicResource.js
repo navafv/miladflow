@@ -40,6 +40,8 @@ export function usePublicResource(path) {
   return { data, loading, notFound, error };
 }
 
+const MAX_BACKOFF_MS = 120_000;
+
 export function usePublicPoll(path, intervalMs = 15_000) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(Boolean(path));
@@ -49,18 +51,22 @@ export function usePublicPoll(path, intervalMs = 15_000) {
   useEffect(() => {
     if (!path) return undefined;
     let cancelled = false;
-    let intervalId = null;
+    let timeoutId = null;
+    let isPaused = false;
     const hasLoadedOnceRef = { current: false };
+    let consecutiveFailures = 0;
 
     const load = async () => {
       try {
         const result = await apiClient.get(path, { skipAuth: true });
         if (cancelled) return;
+        consecutiveFailures = 0;
         setData(result);
         setNotFound(false);
         setError(null);
       } catch (err) {
         if (cancelled) return;
+        consecutiveFailures += 1;
         if (err instanceof ApiError && err.status === 404) {
           setNotFound(true);
         } else {
@@ -74,35 +80,57 @@ export function usePublicPoll(path, intervalMs = 15_000) {
       }
     };
 
-    const startInterval = () => {
-      if (intervalId !== null) return;
-      intervalId = setInterval(load, intervalMs);
+    const clearPendingTimeout = () => {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
     };
 
-    const stopInterval = () => {
-      if (intervalId === null) return;
-      clearInterval(intervalId);
-      intervalId = null;
+    const scheduleNext = () => {
+      clearPendingTimeout();
+      const delay =
+        consecutiveFailures > 0
+          ? Math.min(intervalMs * 2 ** consecutiveFailures, MAX_BACKOFF_MS)
+          : intervalMs;
+      timeoutId = setTimeout(async () => {
+        if (cancelled || isPaused) return;
+        await load();
+        if (!cancelled && !isPaused) scheduleNext();
+      }, delay);
+    };
+
+    const startPolling = () => {
+      isPaused = false;
+      if (timeoutId !== null) return;
+      scheduleNext();
+    };
+
+    const stopPolling = () => {
+      isPaused = true;
+      clearPendingTimeout();
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
-        stopInterval();
+        stopPolling();
       } else {
-        load();
-        startInterval();
+        load().then(() => {
+          if (!cancelled) startPolling();
+        });
       }
     };
 
-    load();
-    if (document.visibilityState !== "hidden") {
-      startInterval();
-    }
+    load().then(() => {
+      if (!cancelled && document.visibilityState !== "hidden") {
+        startPolling();
+      }
+    });
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       cancelled = true;
-      stopInterval();
+      clearPendingTimeout();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [path, intervalMs]);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, memo } from "react";
 import { apiClient, ApiError } from "../../lib/apiClient.js";
 import { useApiResource } from "../../lib/useApiResource.js";
 import { useAuth } from "../../lib/authStore.js";
@@ -43,6 +43,32 @@ function CheckIcon() {
     </svg>
   );
 }
+
+const MatrixRow = memo(function MatrixRow({
+  student,
+  events,
+  registeredPairs,
+}) {
+  return (
+    <tr className="hover:bg-[#21F1A8]/5 dark:hover:bg-slate-800/30">
+      <Td className="sticky left-0 z-10 min-w-[220px] bg-white dark:bg-[#262626] font-semibold text-slate-900 dark:text-white">
+        <div>{student.name}</div>
+        <div className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
+          {student.reg_no} · {student.team_name}
+        </div>
+      </Td>
+      {events.map((ev) => (
+        <Td key={ev.id} className="min-w-[120px] text-center">
+          {registeredPairs.has(`${student.id}:${ev.id}`) ? (
+            <CheckIcon />
+          ) : (
+            <span className="text-slate-300 dark:text-slate-600">–</span>
+          )}
+        </Td>
+      ))}
+    </tr>
+  );
+});
 
 export default function RegistrationsViewPage() {
   const [tab, setTab] = useState("report");
@@ -90,10 +116,6 @@ export default function RegistrationsViewPage() {
             ([studentId, eventId]) => `${studentId}:${eventId}`,
           ),
         );
-        // Group entries are the real scoring unit for Group events — a
-        // team can field more than one group in the same event, each
-        // with its own name and roster, so these ride along separately
-        // from the flat student list.
         const groupEntries = result?.group_entries ?? [];
         setMatrix({ events, students, registeredPairs, groupEntries });
       })
@@ -143,8 +165,8 @@ export default function RegistrationsViewPage() {
     return { exportColumns: columns, exportRows: rows };
   }, [matrix]);
 
-  const exportFilterLabels = useMemo(() => {
-    if (!filtersReady) return [];
+  const selectedFilterNames = useMemo(() => {
+    if (!filtersReady) return null;
     const categoryName =
       categories.find((c) => String(c.id) === String(categoryFilter))?.name ??
       categoryFilter;
@@ -156,7 +178,7 @@ export default function RegistrationsViewPage() {
         ? (teams.find((t) => String(t.id) === String(teamFilter))?.name ??
           teamFilter)
         : null;
-    return [categoryName, genderLabel, teamName];
+    return { categoryName, genderLabel, teamName };
   }, [
     filtersReady,
     categories,
@@ -166,33 +188,24 @@ export default function RegistrationsViewPage() {
     teams,
   ]);
 
+  const exportFilterLabels = useMemo(() => {
+    if (!selectedFilterNames) return [];
+    const { categoryName, genderLabel, teamName } = selectedFilterNames;
+    return [categoryName, genderLabel, teamName];
+  }, [selectedFilterNames]);
+
   const exportFilterSummaryParts = useMemo(() => {
-    if (!filtersReady) return [];
-    const categoryName =
-      categories.find((c) => String(c.id) === String(categoryFilter))?.name ??
-      categoryFilter;
-    const genderLabel =
-      GENDER_OPTIONS.find((g) => g.value === genderFilter)?.label ??
-      genderFilter;
+    if (!selectedFilterNames) return [];
+    const { categoryName, genderLabel, teamName } = selectedFilterNames;
     const parts = [
       { label: "Category", value: categoryName },
       { label: "Gender", value: genderLabel },
     ];
     if (teamFilter !== ALL) {
-      const teamName =
-        teams.find((t) => String(t.id) === String(teamFilter))?.name ??
-        teamFilter;
       parts.push({ label: "Team", value: teamName });
     }
     return parts;
-  }, [
-    filtersReady,
-    categories,
-    categoryFilter,
-    genderFilter,
-    teamFilter,
-    teams,
-  ]);
+  }, [selectedFilterNames, teamFilter]);
 
   const judgeSheetEvents = useMemo(() => {
     if (!matrix) return [];
@@ -207,10 +220,6 @@ export default function RegistrationsViewPage() {
         const isGroup = ev.event_type === "group";
 
         if (isGroup) {
-          // Score per GroupEntry, not per team: a team can enter more
-          // than one group in the same event (e.g. Team A's "Squad
-          // Alpha" and "Squad Beta" both in Group Song), and each is a
-          // separate performance with its own name and roster.
           const groups = matrix.groupEntries
             .filter((g) => g.event_id === ev.id)
             .map((g) => ({
@@ -426,31 +435,12 @@ export default function RegistrationsViewPage() {
                     </thead>
                     <tbody>
                       {matrix.students.map((s) => (
-                        <tr
+                        <MatrixRow
                           key={s.id}
-                          className="hover:bg-[#21F1A8]/5 dark:hover:bg-slate-800/30"
-                        >
-                          <Td className="sticky left-0 z-10 min-w-[220px] bg-white dark:bg-[#262626] font-semibold text-slate-900 dark:text-white">
-                            <div>{s.name}</div>
-                            <div className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
-                              {s.reg_no} · {s.team_name}
-                            </div>
-                          </Td>
-                          {matrix.events.map((ev) => (
-                            <Td
-                              key={ev.id}
-                              className="min-w-[120px] text-center"
-                            >
-                              {isRegistered(s.id, ev.id) ? (
-                                <CheckIcon />
-                              ) : (
-                                <span className="text-slate-300 dark:text-slate-600">
-                                  –
-                                </span>
-                              )}
-                            </Td>
-                          ))}
-                        </tr>
+                          student={s}
+                          events={matrix.events}
+                          registeredPairs={matrix.registeredPairs}
+                        />
                       ))}
                     </tbody>
                   </table>

@@ -10,6 +10,7 @@ import {
 } from "../../lib/pdfFonts.js";
 import { generateJudgeSheetsPDF } from "../../lib/judgeSheetsPdf.js";
 import { buildExportFilename } from "../../lib/exportFilename.js";
+import { Toast, useToast } from "./Toast.jsx";
 
 function DownloadIcon() {
   return (
@@ -42,10 +43,6 @@ function sanitizeCell(value) {
 }
 
 const PDF_MARGIN_PT = 28;
-// Widened slightly to give the now-larger table font more breathing room
-// per column before wrapping — the whole table is scaled down to fit the
-// PDF page width anyway, so this only affects how much horizontal space
-// each column gets to lay out in before that scale-down happens.
 const PDF_TABLE_WIDTH_PX = 1100;
 const PIXEL_RATIO = 2;
 const FOOTER_SPACE_PT = 26;
@@ -240,17 +237,6 @@ export async function exportTableToPdf(
       };
     });
 
-    // IMPORTANT: do NOT pass skipFonts here. The row boundaries above were
-    // measured from the live DOM, which is rendered with the real
-    // registered Malayalam font (see ensureMalayalamFontFace()). If the
-    // captured canvas is rasterized with a *different* fallback font
-    // (skipFonts: true forces html-to-image to substitute one), each
-    // row's actual painted height differs slightly from what we measured.
-    // That per-row drift accumulates over a long roster, and by the final
-    // page the measured/painted boundaries no longer agree — which is what
-    // was silently cropping the last few students off the bottom of the
-    // last page. Rendering with the same font that was measured keeps the
-    // canvas pixel rows aligned with rowBoundsPx.
     const canvas = await toCanvas(table, {
       pixelRatio: PIXEL_RATIO,
       backgroundColor: "#ffffff",
@@ -264,13 +250,6 @@ export async function exportTableToPdf(
       );
     }
 
-    // Defensive rescale: even with matching fonts, browsers can still
-    // sub-pixel round differently between getBoundingClientRect() and the
-    // rasterized canvas. Rather than trust PIXEL_RATIO blindly, rescale
-    // our DOM-measured boundaries onto the canvas's *actual* pixel height
-    // so row slices always stay inside the real captured image — this
-    // guarantees we never compute a page whose last row falls past the
-    // bottom edge of `canvas`.
     const verticalCorrection =
       tableRect.height > 0
         ? canvas.height / (tableRect.height * PIXEL_RATIO)
@@ -415,6 +394,7 @@ export default function ExportButtons({
   const [judgeCount, setJudgeCount] = useState(2);
   const [judgeGenerating, setJudgeGenerating] = useState(false);
   const [judgeError, setJudgeError] = useState(null);
+  const { toast, showToast, dismiss } = useToast();
 
   const handleGenerateJudgeSheets = async () => {
     setJudgeError(null);
@@ -427,7 +407,10 @@ export default function ExportButtons({
       });
       setJudgeModalOpen(false);
     } catch (err) {
-      setJudgeError(err?.message ?? "Could not generate judge sheets.");
+      console.error("Judge sheet PDF generation failed:", err);
+      const message = err?.message ?? "Could not generate judge sheets.";
+      setJudgeError(message);
+      showToast("Failed to generate PDF. Please try again.", "error");
     } finally {
       setJudgeGenerating(false);
     }
@@ -475,9 +458,11 @@ export default function ExportButtons({
         dynamicFilename,
       );
     } catch (err) {
-      setPdfError(
-        err?.message ?? "Could not generate the PDF. Please try again.",
-      );
+      console.error("PDF export failed:", err);
+      const message =
+        err?.message ?? "Could not generate the PDF. Please try again.";
+      setPdfError(message);
+      showToast("Failed to generate PDF. Please try again.", "error");
     } finally {
       setPdfExporting(false);
     }
@@ -485,6 +470,7 @@ export default function ExportButtons({
 
   return (
     <div className="flex flex-col items-end gap-1.5">
+      <Toast toast={toast} onDismiss={dismiss} />
       <div className="flex items-center gap-2">
         <button
           onClick={handleExcel}

@@ -56,6 +56,24 @@ function onTokenChange(listener) {
   return () => tokenListeners.delete(listener);
 }
 
+const forcedLogoutListeners = new Set();
+function emitForcedLogout() {
+  forcedLogoutListeners.forEach((listener) => listener());
+}
+export function onForcedLogout(listener) {
+  forcedLogoutListeners.add(listener);
+  return () => forcedLogoutListeners.delete(listener);
+}
+
+const globalErrorListeners = new Set();
+function notifyGlobalError(error) {
+  globalErrorListeners.forEach((listener) => listener(error));
+}
+export function onApiError(listener) {
+  globalErrorListeners.add(listener);
+  return () => globalErrorListeners.delete(listener);
+}
+
 let refreshPromise = null;
 
 async function refreshAccessToken() {
@@ -111,6 +129,28 @@ async function safeJson(res) {
   }
 }
 
+const REQUEST_TIMEOUT_MS = 15_000;
+
+function withTimeoutSignal(callerSignal, timeoutMs) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      controller.abort();
+    } else {
+      callerSignal.addEventListener("abort", () => controller.abort(), {
+        once: true,
+      });
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => clearTimeout(timeoutId),
+  };
+}
+
 async function request(path, options = {}) {
   const { skipAuth = false, headers: customHeaders, ...rest } = options;
 
@@ -126,15 +166,28 @@ async function request(path, options = {}) {
       if (access) headers.set("Authorization", `Bearer ${access}`);
     }
 
+    const { signal, cleanup } = withTimeoutSignal(
+      rest.signal,
+      REQUEST_TIMEOUT_MS,
+    );
+
     let res;
     try {
-      res = await fetch(`${BASE_URL}${path}`, { ...rest, headers });
+      res = await fetch(`${BASE_URL}${path}`, { ...rest, headers, signal });
     } catch (err) {
-      if (err?.name === "AbortError") throw err;
+      if (err?.name === "AbortError") {
+        if (rest.signal?.aborted) throw err;
+        throw new ApiError("Request timed out. Please try again.", {
+          status: null,
+          data: err,
+        });
+      }
       throw new ApiError("Network error — please check your connection.", {
         status: null,
         data: err,
       });
+    } finally {
+      cleanup();
     }
     return res;
   };
@@ -152,6 +205,7 @@ async function request(path, options = {}) {
     if (refreshError) {
       clearTokens();
       emitTokenChange();
+      emitForcedLogout();
 
       throw new ApiError("Session expired. Please log in again.", {
         status: 401,
@@ -170,7 +224,11 @@ async function request(path, options = {}) {
       data?.detail ||
       data?.message ||
       `Request failed with status ${res.status}`;
-    throw new ApiError(message, { status: res.status, data });
+    const apiError = new ApiError(message, { status: res.status, data });
+    if (res.status >= 500 || res.status === 403) {
+      notifyGlobalError(apiError);
+    }
+    throw apiError;
   }
 
   if (res.status === 204) return null;
@@ -200,6 +258,7 @@ export const apiClient = {
   delete: (path, options) => request(path, { ...options, method: "DELETE" }),
 
   raw: request,
+  refreshAccessToken,
 };
 
 export const tokenStorage = {
@@ -208,4 +267,5 @@ export const tokenStorage = {
   setTokens,
   clearTokens,
   onTokenChange,
+  onForcedLogout,
 };

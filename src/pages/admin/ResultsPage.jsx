@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiClient } from "../../lib/apiClient.js";
 import { useApiResource } from "../../lib/useApiResource.js";
 import {
@@ -134,7 +134,10 @@ export default function ResultsPage() {
   const effectiveEventId = eventId || filteredEvents[0]?.id || "";
   const effectiveTeamId = pointsForm.team_id || teams[0]?.id || "";
 
-  const event = events.find((ev) => ev.id === Number(effectiveEventId));
+  const event = useMemo(
+    () => events.find((ev) => ev.id === Number(effectiveEventId)),
+    [events, effectiveEventId],
+  );
   const isIndividual = event?.event_type === "individual";
 
   useEffect(() => {
@@ -167,26 +170,30 @@ export default function ResultsPage() {
     return students.filter((s) => ids.includes(s.id));
   }, [event, isIndividual, students, byStudentId, currentEventId]);
 
-  const placementRows = isIndividual
-    ? registeredStudents.map((s) => ({
+  const placementRows = useMemo(() => {
+    if (isIndividual) {
+      return registeredStudents.map((s) => ({
         id: s.id,
         kind: "student",
         label: s.name,
         sub: s.team?.name,
-      }))
-    : groupEntries.length > 0
-      ? groupEntries.map((ge) => ({
-          id: ge.id,
-          kind: "group_entry",
-          label: ge.display_name || ge.team?.name,
-          sub: ge.team?.name,
-        }))
-      : teams.map((t) => ({
-          id: t.id,
-          kind: "team",
-          label: t.name,
-          sub: null,
-        }));
+      }));
+    }
+    if (groupEntries.length > 0) {
+      return groupEntries.map((ge) => ({
+        id: ge.id,
+        kind: "group_entry",
+        label: ge.display_name || ge.team?.name,
+        sub: ge.team?.name,
+      }));
+    }
+    return teams.map((t) => ({
+      id: t.id,
+      kind: "team",
+      label: t.name,
+      sub: null,
+    }));
+  }, [isIndividual, registeredStudents, groupEntries, teams]);
 
   const winners = useMemo(() => {
     const label = (p) => toWinnerLabel(p);
@@ -200,41 +207,53 @@ export default function ResultsPage() {
   const hasAnyWinner =
     winners[1].length + winners[2].length + winners[3].length > 0;
 
-  const handleSetPlacement = async (place, rowId, kind) => {
-    if (!event) return;
-    setPlacementError("");
+  const handleSetPlacement = useCallback(
+    async (place, rowId, kind) => {
+      if (!event) return;
+      setPlacementError("");
 
-    const existing =
-      place === 1
-        ? first
-        : place === 2
-          ? second
-          : thirds.find((p) => placementMatchesRow(p, rowId, kind));
-    const isSameRow = existing && placementMatchesRow(existing, rowId, kind);
+      const existing =
+        place === 1
+          ? first
+          : place === 2
+            ? second
+            : thirds.find((p) => placementMatchesRow(p, rowId, kind));
+      const isSameRow = existing && placementMatchesRow(existing, rowId, kind);
 
-    const payload = {
-      event_id: event.id,
-      place,
-      student_id: kind === "student" ? rowId : null,
-      team_id: kind === "team" ? rowId : null,
-      group_entry_id: kind === "group_entry" ? rowId : null,
-    };
+      const payload = {
+        event_id: event.id,
+        place,
+        student_id: kind === "student" ? rowId : null,
+        team_id: kind === "team" ? rowId : null,
+        group_entry_id: kind === "group_entry" ? rowId : null,
+      };
 
-    try {
-      if (isSameRow) {
-        await removePlacement(existing.id);
-      } else if (existing && place !== 3) {
-        await updatePlacement(existing.id, payload);
-      } else {
-        await createPlacement(payload);
+      try {
+        if (isSameRow) {
+          await removePlacement(existing.id);
+        } else if (existing && place !== 3) {
+          await updatePlacement(existing.id, payload);
+        } else {
+          await createPlacement(payload);
+        }
+        refreshLeaderboard();
+      } catch (err) {
+        setPlacementError(
+          err.message || "Could not save this placement. Please try again.",
+        );
       }
-      refreshLeaderboard();
-    } catch (err) {
-      setPlacementError(
-        err.message || "Could not save this placement. Please try again.",
-      );
-    }
-  };
+    },
+    [
+      event,
+      first,
+      second,
+      thirds,
+      removePlacement,
+      updatePlacement,
+      createPlacement,
+      refreshLeaderboard,
+    ],
+  );
 
   const teamTotals = useMemo(() => {
     const totals = {};
