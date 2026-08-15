@@ -171,10 +171,6 @@ function formatRegNo(s) {
   return s?.regNo ? s.regNo : "—";
 }
 
-function formatRegNoLine(s) {
-  return s?.regNo ? `Reg: ${s.regNo}` : "Reg: —";
-}
-
 function buildSubtitle(ev) {
   const parts = [ev.categoryLabel, ev.genderLabel];
   if (isGroupEvent(ev)) parts.push("Group Event");
@@ -203,24 +199,12 @@ function buildEventRows(doc, ev, detailMaxWidth) {
       DETAIL_FONT_SIZE,
       true,
     );
-    const memberLines = (g.members ?? [])
-      .filter(Boolean)
-      .flatMap((m) =>
-        measureWrap(
-          doc,
-          `- ${formatRegNoLine(m)}`,
-          detailMaxWidth,
-          DETAIL_FONT_SIZE,
-          false,
-        ),
-      );
 
     return {
       slNo: String(idx + 1),
       isGroup: true,
       groupNameLines,
-      memberLines,
-      totalLines: groupNameLines.length + memberLines.length,
+      totalLines: groupNameLines.length,
     };
   });
 }
@@ -311,16 +295,6 @@ function didDrawGroupCell(doc, data, chunkRows) {
     drawTextLine(doc, line, textX, textY, {
       fontSize: DETAIL_FONT_SIZE,
       bold: true,
-      color: INK,
-      align: "left",
-    });
-    textY += DETAIL_LINE_HEIGHT;
-  });
-
-  meta.memberLines.forEach((line) => {
-    drawTextLine(doc, line, textX, textY, {
-      fontSize: DETAIL_FONT_SIZE,
-      bold: false,
       color: INK,
       align: "left",
     });
