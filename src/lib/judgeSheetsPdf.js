@@ -32,8 +32,9 @@ const EVENT_FONT_SIZE = 16;
 const EVENT_LINE_HEIGHT = EVENT_FONT_SIZE * 1.18;
 
 const JUDGE_BLOCK_H = 21;
-const TABLE_HEAD_HEIGHT_APPROX = 11 * 1.3 + CELL_PADDING * 2;
-const FIT_SAFETY_MARGIN = 6;
+const HEAD_FONT_SIZE = 11;
+const TABLE_HEAD_HEIGHT_APPROX = HEAD_FONT_SIZE * 1.3 + CELL_PADDING * 2;
+const FIT_SAFETY_MARGIN = 14;
 const YIELD_EVERY_N_ITEMS = 8;
 
 function yieldToMainThread() {
@@ -106,7 +107,9 @@ export async function generateJudgeSheetsPDF(
     const chunks = chunkRowsToFit(eventRows, availablePerSlot);
 
     chunks.forEach((chunkRows, chunkIndex) => {
-      const { left } = placeSlot();
+      const { left, pageNum } = placeSlot();
+      const pagesBefore = doc.internal.getNumberOfPages();
+
       drawGridSheet(doc, ev, chunkRows, {
         top: MARGIN_PT,
         left,
@@ -116,6 +119,16 @@ export async function generateJudgeSheetsPDF(
         orgName,
         continuation: chunkIndex > 0,
       });
+
+      const pagesAfter = doc.internal.getNumberOfPages();
+      if (pagesAfter !== pagesBefore) {
+        throw new Error(
+          `Judge sheet layout desync: chunk for "${ev.eventName ?? "event"}" ` +
+            `(slot on page ${pageNum}) overflowed its slot and autoTable added ` +
+            `an extra page. This means chunkRowsToFit's height estimate for a ` +
+            `row diverged from the height actually enforced during rendering.`,
+        );
+      }
     });
 
     if (i > 0 && i % YIELD_EVERY_N_ITEMS === 0) {
@@ -212,19 +225,14 @@ function buildEventRows(doc, ev, detailMaxWidth) {
   });
 }
 
+const SINGLE_LINE_ROW_H = DETAIL_FONT_SIZE * 1.3 + CELL_PADDING * 2;
+
 function rowHeightOf(r) {
-  const singleLineRowH = DETAIL_FONT_SIZE * 1.3 + CELL_PADDING * 2;
-  if (!r.isGroup) return singleLineRowH;
+  if (!r.isGroup) return SINGLE_LINE_ROW_H;
   const groupRowH = r.totalLines * DETAIL_LINE_HEIGHT + CELL_PADDING * 2;
-  return Math.max(groupRowH, singleLineRowH);
+  return Math.max(groupRowH, SINGLE_LINE_ROW_H);
 }
 
-/**
- * Splits an event's rows into chunks, each of which fits within
- * `availableHeight` (the vertical space left in a single slot after the
- * header + table head). Row order / slNo is preserved across chunks so a
- * split event still reads as one continuous roster.
- */
 function chunkRowsToFit(eventRows, availableHeight) {
   if (eventRows.length === 0) return [[]];
 
@@ -422,7 +430,7 @@ function drawGridSheet(
       fillColor: HEAD_BG,
       textColor: INK,
       fontStyle: "bold",
-      fontSize: 11,
+      fontSize: HEAD_FONT_SIZE,
       cellPadding: CELL_PADDING,
     },
     bodyStyles: {
