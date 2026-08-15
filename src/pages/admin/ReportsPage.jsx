@@ -13,6 +13,7 @@ import {
 import { buildExportFilename } from "../../lib/exportFilename.js";
 import { ensureMalayalamFontFace } from "../../lib/pdfFonts.js";
 import { generateJudgeSheetsPDF } from "../../lib/judgeSheetsPdf.js";
+import { Toast, useToast } from "../../components/admin/Toast.jsx";
 
 async function downloadTablePdf({
   columns,
@@ -190,7 +191,7 @@ const ICONS = {
   ),
 };
 
-function RegistrationMatrixCard({ categories, teams, orgName }) {
+function RegistrationMatrixCard({ categories, teams, orgName, showToast }) {
   const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [genderFilter, setGenderFilter] = useState(ALL);
   const [teamFilter, setTeamFilter] = useState(ALL);
@@ -294,12 +295,17 @@ function RegistrationMatrixCard({ categories, teams, orgName }) {
           orgName,
         });
       }
+      showToast(
+        `Registration matrix exported successfully (${kind === "excel" ? "Excel" : "PDF"}).`,
+        "success",
+      );
     } catch (err) {
-      setError(
+      const message =
         err instanceof ApiError
           ? err.message
-          : (err?.message ?? "Could not generate this export."),
-      );
+          : (err?.message ?? "Could not generate this export.");
+      setError(message);
+      showToast(message, "error");
     } finally {
       setLoadingKind(null);
     }
@@ -387,7 +393,7 @@ function RegistrationMatrixCard({ categories, teams, orgName }) {
   );
 }
 
-function JudgeSheetsCard({ categories, orgName }) {
+function JudgeSheetsCard({ categories, orgName, showToast }) {
   const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [genderFilter, setGenderFilter] = useState(ALL);
   const [judgeCount, setJudgeCount] = useState(2);
@@ -478,8 +484,11 @@ function JudgeSheetsCard({ categories, orgName }) {
         orgName,
         filename: "Judge-Sheets",
       });
+      showToast("Judge sheets generated successfully.", "success");
     } catch (err) {
-      setError(err?.message ?? "Could not generate judge sheets.");
+      const message = err?.message ?? "Could not generate judge sheets.";
+      setError(message);
+      showToast(message, "error");
     } finally {
       setLoading(false);
     }
@@ -560,7 +569,7 @@ function JudgeSheetsCard({ categories, orgName }) {
   );
 }
 
-function ResultsCard({ categories, events, orgName }) {
+function ResultsCard({ categories, events, orgName, showToast }) {
   const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [allResults, setAllResults] = useState(true);
   const [loadingKind, setLoadingKind] = useState(null);
@@ -686,12 +695,17 @@ function ResultsCard({ categories, events, orgName }) {
           orgName,
         });
       }
+      showToast(
+        `Results exported successfully (${kind === "excel" ? "Excel" : "PDF"}).`,
+        "success",
+      );
     } catch (err) {
-      setError(
+      const message =
         err instanceof ApiError
           ? err.message
-          : (err?.message ?? "Could not generate this export."),
-      );
+          : (err?.message ?? "Could not generate this export.");
+      setError(message);
+      showToast(message, "error");
     } finally {
       setLoadingKind(null);
     }
@@ -782,6 +796,7 @@ export default function ReportsPage() {
     useApiResource("/categories/");
   const { data: teams, loading: teamsLoading } = useApiResource("/teams/");
   const { data: events, loading: eventsLoading } = useApiResource("/events/");
+  const { toast, showToast, dismiss } = useToast();
 
   const loadingFoundationData =
     categoriesLoading || teamsLoading || eventsLoading;
@@ -803,15 +818,23 @@ export default function ReportsPage() {
             categories={categories}
             teams={teams}
             orgName={orgName}
+            showToast={showToast}
           />
-          <JudgeSheetsCard categories={categories} orgName={orgName} />
+          <JudgeSheetsCard
+            categories={categories}
+            orgName={orgName}
+            showToast={showToast}
+          />
           <ResultsCard
             categories={categories}
             events={events}
             orgName={orgName}
+            showToast={showToast}
           />
         </div>
       )}
+
+      <Toast toast={toast} onDismiss={dismiss} />
     </div>
   );
 }

@@ -47,8 +47,12 @@ export default function VenuesPage() {
   const handleDelete = async (id) => {
     try {
       await remove(id);
-    } catch {
-      showToast("Could not delete this venue. Please try again.");
+      showToast("Venue deleted successfully.", "success");
+    } catch (err) {
+      showToast(
+        err.message || "Could not delete this venue. Please try again.",
+        "error",
+      );
     }
   };
 
@@ -62,10 +66,17 @@ export default function VenuesPage() {
         await create(form);
       }
       setModalOpen(false);
-    } catch (err) {
-      setFormError(
-        err.message || "Could not save this venue. Please try again.",
+      showToast(
+        editingId
+          ? "Venue updated successfully."
+          : "Venue created successfully.",
+        "success",
       );
+    } catch (err) {
+      const message =
+        err.message || "Could not save this venue. Please try again.";
+      setFormError(message);
+      showToast(message, "error");
     }
   };
 

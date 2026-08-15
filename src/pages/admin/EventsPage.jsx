@@ -144,8 +144,12 @@ export default function EventsPage() {
   const handleDelete = async (id) => {
     try {
       await remove(id);
-    } catch {
-      showToast("Could not delete this event. Please try again.");
+      showToast("Event deleted successfully.", "success");
+    } catch (err) {
+      showToast(
+        err.message || "Could not delete this event. Please try again.",
+        "error",
+      );
     }
   };
 
@@ -186,6 +190,12 @@ export default function EventsPage() {
         await create(payload);
       }
       setModalOpen(false);
+      showToast(
+        editingId
+          ? "Event updated successfully."
+          : "Event created successfully.",
+        "success",
+      );
     } catch (err) {
       const detail = err instanceof ApiError ? err.data?.error?.detail : null;
       if (detail && typeof detail === "object" && !Array.isArray(detail)) {
@@ -197,9 +207,10 @@ export default function EventsPage() {
         });
         setFieldErrors(nextFieldErrors);
       }
-      setFormError(
-        err.message || "Could not save this event. Please try again.",
-      );
+      const message =
+        err.message || "Could not save this event. Please try again.";
+      setFormError(message);
+      showToast(message, "error");
     }
   };
 

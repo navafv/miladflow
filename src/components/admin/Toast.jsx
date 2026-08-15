@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { subscribeToast } from "../../lib/toastBus.js";
 
 export function useToast() {
   const [toast, setToast] = useState(null);
@@ -12,6 +13,12 @@ export function useToast() {
     const timer = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    return subscribeToast((message, type) => {
+      setToast({ message, type, key: Date.now() });
+    });
+  }, []);
 
   return { toast, showToast, dismiss: () => setToast(null) };
 }

@@ -132,8 +132,12 @@ export default function RulesPage() {
   const handleDelete = async (id) => {
     try {
       await remove(id);
-    } catch {
-      showToast("Could not delete this rule. Please try again.");
+      showToast("Rule deleted successfully.", "success");
+    } catch (err) {
+      showToast(
+        err.message || "Could not delete this rule. Please try again.",
+        "error",
+      );
     }
   };
 
@@ -170,10 +174,15 @@ export default function RulesPage() {
         await create(payload);
       }
       setModalOpen(false);
-    } catch (err) {
-      setFormError(
-        err.message || "Could not save this rule. Please try again.",
+      showToast(
+        editingId ? "Rule updated successfully." : "Rule created successfully.",
+        "success",
       );
+    } catch (err) {
+      const message =
+        err.message || "Could not save this rule. Please try again.";
+      setFormError(message);
+      showToast(message, "error");
     }
   };
 

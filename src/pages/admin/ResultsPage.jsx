@@ -232,16 +232,20 @@ export default function ResultsPage() {
       try {
         if (isSameRow) {
           await removePlacement(existing.id);
+          showToast("Placement removed.", "success");
         } else if (existing && place !== 3) {
           await updatePlacement(existing.id, payload);
+          showToast("Placement updated successfully.", "success");
         } else {
           await createPlacement(payload);
+          showToast("Placement saved successfully.", "success");
         }
         refreshLeaderboard();
       } catch (err) {
-        setPlacementError(
-          err.message || "Could not save this placement. Please try again.",
-        );
+        const message =
+          err.message || "Could not save this placement. Please try again.";
+        setPlacementError(message);
+        showToast(message, "error");
       }
     },
     [
@@ -253,6 +257,7 @@ export default function ResultsPage() {
       updatePlacement,
       createPlacement,
       refreshLeaderboard,
+      showToast,
     ],
   );
 
@@ -289,10 +294,12 @@ export default function ResultsPage() {
       });
       setPointsForm((f) => ({ ...f, points: 5, note: "" }));
       refreshLeaderboard();
+      showToast("Points awarded successfully.", "success");
     } catch (err) {
-      setPointsError(
-        err.message || "Could not award these points. Please try again.",
-      );
+      const message =
+        err.message || "Could not award these points. Please try again.";
+      setPointsError(message);
+      showToast(message, "error");
     }
   };
 

@@ -332,10 +332,17 @@ export default function AdminSchedulePage() {
         await create(payload);
       }
       setModalOpen(false);
-    } catch (err) {
-      setFormError(
-        err.message || "Could not save this schedule item. Please try again.",
+      showToast(
+        editingId
+          ? "Schedule item updated successfully."
+          : "Schedule item created successfully.",
+        "success",
       );
+    } catch (err) {
+      const message =
+        err.message || "Could not save this schedule item. Please try again.";
+      setFormError(message);
+      showToast(message, "error");
     }
   };
 

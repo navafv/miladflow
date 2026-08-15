@@ -6,6 +6,7 @@ import MadrassaFooter from "../components/MadrassaFooter.jsx";
 import PublicUnavailable from "../components/PublicUnavailable.jsx";
 import { apiClient, ApiError } from "../lib/apiClient.js";
 import { usePublicResource } from "../lib/usePublicResource.js";
+import { Toast, useToast } from "../components/admin/Toast.jsx";
 
 const TABS = [
   { key: "all", label: "All Results" },
@@ -94,7 +95,7 @@ function useResultFilterOptions(slug) {
   return { categories, teams };
 }
 
-function AllResultsTab({ slug }) {
+function AllResultsTab({ slug, showToast }) {
   const { categories, teams } = useResultFilterOptions(slug);
   const [category, setCategory] = useState(CATEGORY_ALL);
   const [team, setTeam] = useState(TEAM_ALL);
@@ -132,9 +133,10 @@ function AllResultsTab({ slug }) {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(
-          err instanceof ApiError ? err.message : "Could not load results.",
-        );
+        const message =
+          err instanceof ApiError ? err.message : "Could not load results.";
+        setError(message);
+        showToast(message, "error");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -719,6 +721,7 @@ export default function ResultsPage() {
     slug ? `/public/${slug}/` : null,
   );
   const [tab, setTab] = useState(TABS[0].key);
+  const { toast, showToast, dismiss } = useToast();
 
   if (notFound) return <PublicUnavailable />;
 
@@ -769,7 +772,7 @@ export default function ResultsPage() {
         </div>
 
         {tab === "all" ? (
-          <AllResultsTab slug={slug} />
+          <AllResultsTab slug={slug} showToast={showToast} />
         ) : tab === "event" ? (
           <EventResultsTab slug={slug} />
         ) : (
@@ -777,6 +780,7 @@ export default function ResultsPage() {
         )}
       </main>
       <MadrassaFooter madrassaName={madrassaName} />
+      <Toast toast={toast} onDismiss={dismiss} />
     </div>
   );
 }

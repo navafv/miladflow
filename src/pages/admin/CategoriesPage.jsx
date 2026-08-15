@@ -75,8 +75,12 @@ export default function CategoriesPage() {
     }
     try {
       await remove(category.id);
-    } catch {
-      showToast("Could not delete this category. Please try again.");
+      showToast("Category deleted successfully.", "success");
+    } catch (err) {
+      showToast(
+        err.message || "Could not delete this category. Please try again.",
+        "error",
+      );
     }
   };
 
@@ -92,9 +96,14 @@ export default function CategoriesPage() {
         starting_sequence: null,
       });
       setData((prev) => withDefaultDemotion(prev, saved));
-    } catch {
+      showToast("Default category updated successfully.", "success");
+    } catch (err) {
       setData(previous);
-      showToast("Could not update the default category. Please try again.");
+      showToast(
+        err.message ||
+          "Could not update the default category. Please try again.",
+        "error",
+      );
     }
   };
 
@@ -142,11 +151,18 @@ export default function CategoriesPage() {
         setData((prev) => withDefaultDemotion(prev, saved));
       }
       setModalOpen(false);
+      showToast(
+        editingId
+          ? "Category updated successfully."
+          : "Category created successfully.",
+        "success",
+      );
     } catch (err) {
       setData(previous);
-      setFormError(
-        err.message || "Could not save this category. Please try again.",
-      );
+      const message =
+        err.message || "Could not save this category. Please try again.";
+      setFormError(message);
+      showToast(message, "error");
     }
   };
 

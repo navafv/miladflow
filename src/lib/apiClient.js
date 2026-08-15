@@ -1,3 +1,5 @@
+import { emitToast } from "./toastBus.js";
+
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 if (!BASE_URL) {
@@ -203,6 +205,7 @@ async function request(path, options = {}) {
     }
 
     if (refreshError) {
+      emitToast("Session expired. Please log in again.", "error");
       clearTokens();
       emitTokenChange();
       emitForcedLogout();

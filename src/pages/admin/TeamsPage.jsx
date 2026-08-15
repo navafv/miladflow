@@ -55,8 +55,12 @@ export default function TeamsPage() {
   const handleDelete = async (id) => {
     try {
       await remove(id);
-    } catch {
-      showToast("Could not delete this team. Please try again.");
+      showToast("Team deleted successfully.", "success");
+    } catch (err) {
+      showToast(
+        err.message || "Could not delete this team. Please try again.",
+        "error",
+      );
     }
   };
 
@@ -70,10 +74,15 @@ export default function TeamsPage() {
         await create(form);
       }
       setModalOpen(false);
-    } catch (err) {
-      setFormError(
-        err.message || "Could not save this team. Please try again.",
+      showToast(
+        editingId ? "Team updated successfully." : "Team created successfully.",
+        "success",
       );
+    } catch (err) {
+      const message =
+        err.message || "Could not save this team. Please try again.";
+      setFormError(message);
+      showToast(message, "error");
     }
   };
 

@@ -1,5 +1,6 @@
 import notoMalayalamRegularUrl from "../assets/fonts/NotoSansMalayalam-Regular.ttf?url";
 import notoMalayalamBoldUrl from "../assets/fonts/NotoSansMalayalam-Bold.ttf?url";
+import { emitToast } from "./toastBus.js";
 
 export const MALAYALAM_FONT_FAMILY = "MiladFlow Export Malayalam";
 
@@ -12,6 +13,16 @@ const STYLE_TAG_ATTR = "data-milad-export-font";
 
 let cssReadyPromise = null;
 let base64Promise = null;
+let hasWarnedFontFallback = false;
+
+function warnFontFallbackOnce() {
+  if (hasWarnedFontFallback) return;
+  hasWarnedFontFallback = true;
+  emitToast(
+    "Malayalam fonts failed to load. Text may not render correctly.",
+    "error",
+  );
+}
 
 function arrayBufferToBase64(buffer) {
   let binary = "";
@@ -86,6 +97,7 @@ export function ensureMalayalamFontFace() {
             "correctly, but the export will continue.",
           err,
         );
+        warnFontFallbackOnce();
         cssReadyPromise = null;
       }
     })();
@@ -116,6 +128,7 @@ export async function registerMalayalamPdfFont(doc) {
         "correctly.",
       err,
     );
+    warnFontFallbackOnce();
     PDF_FONT_NAME = FALLBACK_PDF_FONT_NAME;
   }
 
