@@ -149,6 +149,7 @@ export default function RegistrationsViewPage() {
       ...matrix.events.map((ev) => ({
         key: `event_${ev.id}`,
         label: ev.name,
+        vertical: true,
       })),
     ];
     const rows = matrix.students.map((s) => {

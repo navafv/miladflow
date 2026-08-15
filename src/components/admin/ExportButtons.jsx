@@ -11,6 +11,7 @@ import {
   containsMalayalam,
   measureWrap,
   drawWrappedText,
+  drawVerticalHeaderText,
 } from "../../lib/richText.js";
 import { generateJudgeSheetsPDF } from "../../lib/judgeSheetsPdf.js";
 import { generateStageSlipsPDF } from "../../lib/stageSlipsPdf.js";
@@ -51,13 +52,12 @@ const PDF_MARGIN_PT = 28;
 const FOOTER_SPACE_PT = 26;
 const TABLE_FONT_SIZE = 9.5;
 const CELL_PADDING = 6;
+const VERTICAL_HEADER_MAX_HEIGHT_PT = 110;
 
 const INK = [23, 23, 23];
 const MUTED = [110, 118, 128];
 const RULE = [210, 216, 222];
 const BRAND = [16, 145, 105];
-const HEAD_BG = [33, 241, 168];
-const ZEBRA_BG = [244, 246, 248];
 const WHITE = [255, 255, 255];
 
 function formatGeneratedDate(date) {
@@ -153,6 +153,25 @@ function drawFooter(doc, generatedAt, pageIndex, totalPages) {
   );
 }
 
+function drawCheckMark(doc, cell) {
+  const box = Math.max(8, Math.min(cell.width, cell.height) * 0.62);
+  const scale = box / 20;
+  const originX = cell.x + cell.width / 2 - box / 2;
+  const originY = cell.y + cell.height / 2 - box / 2;
+
+  const p1 = [originX + 4 * scale, originY + 10.5 * scale];
+  const p2 = [originX + 8 * scale, originY + 14.5 * scale];
+  const p3 = [originX + 16 * scale, originY + 5.5 * scale];
+
+  doc.setLineDashPattern([], 0);
+  doc.setDrawColor(...BRAND);
+  doc.setLineWidth(Math.max(1.2, box * 0.09));
+  doc.setLineCap("round");
+  doc.setLineJoin("round");
+  doc.line(p1[0], p1[1], p2[0], p2[1]);
+  doc.line(p2[0], p2[1], p3[0], p3[1]);
+}
+
 export function buildExportTableNode({ columns, rows }) {
   return { columns, rows };
 }
@@ -193,18 +212,37 @@ export async function exportTableToPdf(
       lineWidth: 0.5,
       overflow: "linebreak",
       valign: "top",
+      fillColor: WHITE,
     },
     headStyles: {
-      fillColor: HEAD_BG,
+      fillColor: WHITE,
       textColor: INK,
       fontStyle: "bold",
       fontSize: TABLE_FONT_SIZE,
       cellPadding: CELL_PADDING,
-    },
-    alternateRowStyles: {
-      fillColor: ZEBRA_BG,
+      halign: "center",
+      valign: "middle",
     },
     didParseCell: (data) => {
+      const isHead = data.section === "head";
+      const col = columns[data.column.index];
+
+      if (isHead && col?.vertical) {
+        data.cell.text = [];
+        const needed =
+          VERTICAL_HEADER_MAX_HEIGHT_PT +
+          data.cell.padding("top") +
+          data.cell.padding("bottom");
+        if (needed > data.row.height) data.row.height = needed;
+        return;
+      }
+
+      if (!isHead && String(data.cell.raw ?? "").trim() === "✓") {
+        data.cell.text = [];
+        data.cell._tick = true;
+        return;
+      }
+
       const raw = data.cell.raw;
       if (typeof raw !== "string" || !containsMalayalam(raw)) return;
 
@@ -215,7 +253,7 @@ export async function exportTableToPdf(
         data.cell.width -
         data.cell.padding("left") -
         data.cell.padding("right");
-      const bold = data.section === "head";
+      const bold = isHead;
       const lines = measureWrap(doc, raw, innerWidth, TABLE_FONT_SIZE, bold);
       const lineHeight = TABLE_FONT_SIZE * 1.18;
       const needed =
@@ -225,28 +263,52 @@ export async function exportTableToPdf(
       if (needed > data.row.height) data.row.height = needed;
     },
     didDrawCell: (data) => {
-      const meta = data.cell._milad;
+      const isHead = data.section === "head";
+      const col = columns[data.column.index];
+      const { cell } = data;
+
+      if (isHead && col?.vertical) {
+        drawVerticalHeaderText(
+          doc,
+          col.label,
+          cell.x,
+          cell.y,
+          cell.width,
+          cell.height,
+          {
+            fontSize: TABLE_FONT_SIZE,
+            bold: true,
+            color: INK,
+            bgColor: WHITE,
+            maxRun: VERTICAL_HEADER_MAX_HEIGHT_PT,
+          },
+        );
+        return;
+      }
+
+      if (cell._tick) {
+        drawCheckMark(doc, cell);
+        return;
+      }
+
+      const meta = cell._milad;
       if (!meta) return;
 
-      const { cell } = data;
-      const isHead = data.section === "head";
-      const isStripe = !isHead && rows.length > 0 && data.row.index % 2 === 1;
-      const bgColor = isHead ? HEAD_BG : isStripe ? ZEBRA_BG : WHITE;
-
+      const align = isHead ? "center" : "left";
       const padLeft = cell.padding("left");
       const padTop = cell.padding("top");
       const innerWidth = cell.width - padLeft - cell.padding("right");
-      const textX = cell.x + padLeft;
-      let textY = cell.y + padTop + TABLE_FONT_SIZE * 0.85;
+      const textX = isHead ? cell.x + cell.width / 2 : cell.x + padLeft;
+      const textY = cell.y + padTop + TABLE_FONT_SIZE * 0.85;
 
       drawWrappedText(doc, meta.malayalam, textX, textY, {
         fontSize: TABLE_FONT_SIZE,
         bold: isHead,
         color: INK,
-        align: "left",
+        align,
         maxWidth: innerWidth,
         lineHeight: TABLE_FONT_SIZE * 1.18,
-        bgColor,
+        bgColor: WHITE,
       });
     },
     didDrawPage: (data) => {

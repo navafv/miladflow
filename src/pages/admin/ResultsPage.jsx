@@ -177,6 +177,7 @@ export default function ResultsPage() {
         kind: "student",
         label: s.name,
         sub: s.team?.name,
+        regNo: s.reg_no,
       }));
     }
     if (groupEntries.length > 0) {
@@ -411,6 +412,11 @@ export default function ResultsPage() {
                             {row.kind === "group_entry" && (
                               <span className="rounded-full bg-[#21F1A8]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#0f9c74] dark:text-[#21F1A8]">
                                 Group
+                              </span>
+                            )}
+                            {row.regNo && (
+                              <span className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                                #{row.regNo}
                               </span>
                             )}
                           </p>
