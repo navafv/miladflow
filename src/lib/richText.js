@@ -4,11 +4,11 @@ import {
   ensureMalayalamFontFace,
 } from "./pdfFonts.js";
 
-const RASTER_SCALE = 2;
+const RASTER_SCALE = 6;
 const MALAYALAM_RANGE = /[\u0D00-\u0D7F]/;
 const MAX_RASTER_WIDTH_PX = 900;
 const ELLIPSIS = "…";
-const RASTER_JPEG_QUALITY = 0.4;
+const RASTER_JPEG_QUALITY = 1;
 
 export function containsMalayalam(text) {
   return MALAYALAM_RANGE.test(text ?? "");
