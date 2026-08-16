@@ -190,6 +190,22 @@ const ICONS = {
       />
     </svg>
   ),
+  nonPlaced: (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      className="h-5 w-5"
+    >
+      <circle cx="8" cy="7" r="3.2" />
+      <path
+        d="M2.5 17c0-3 2.5-5.2 5.5-5.2S13.5 14 13.5 17"
+        strokeLinecap="round"
+      />
+      <path d="M14.5 6.5 17.5 9.5M17.5 6.5 14.5 9.5" strokeLinecap="round" />
+    </svg>
+  ),
 };
 
 function RegistrationMatrixCard({ categories, teams, orgName, showToast }) {
@@ -954,6 +970,189 @@ function ResultsCard({ categories, events, students, orgName, showToast }) {
   );
 }
 
+function genderDisplayLabel(gender) {
+  const key = String(gender ?? "").toLowerCase();
+  if (key === "boys") return "Boys";
+  if (key === "girls") return "Girls";
+  return "—";
+}
+
+function NonPlacedStudentsCard({ categories, teams, orgName, showToast }) {
+  const [categoryFilter, setCategoryFilter] = useState(ALL);
+  const [teamFilter, setTeamFilter] = useState(ALL);
+  const [genderFilter, setGenderFilter] = useState(ALL);
+  const [loadingKind, setLoadingKind] = useState(null);
+  const [error, setError] = useState(null);
+
+  const filterLabels = [
+    categoryFilter !== ALL
+      ? (categories.find((c) => String(c.id) === String(categoryFilter))
+          ?.name ?? categoryFilter)
+      : null,
+    teamFilter !== ALL
+      ? (teams.find((t) => String(t.id) === String(teamFilter))?.name ??
+        teamFilter)
+      : null,
+    genderFilter !== ALL
+      ? (GENDER_OPTIONS.find((g) => g.value === genderFilter)?.label ??
+        genderFilter)
+      : null,
+  ].filter(Boolean);
+
+  async function fetchNonPlacedRows() {
+    const params = new URLSearchParams();
+    if (categoryFilter !== ALL) params.set("category", categoryFilter);
+    if (teamFilter !== ALL) params.set("team", teamFilter);
+    if (genderFilter !== ALL) params.set("gender", genderFilter);
+    const query = params.toString();
+
+    const result = await apiClient.get(
+      `/students/non-placed/${query ? `?${query}` : ""}`,
+    );
+    const list = Array.isArray(result) ? result : (result?.results ?? []);
+
+    const columns = [
+      { key: "regNo", label: "Reg. No." },
+      { key: "name", label: "Name" },
+      { key: "gender", label: "Gender" },
+      { key: "team", label: "Team" },
+      { key: "className", label: "Class" },
+      { key: "category", label: "Category" },
+    ];
+    const rows = list.map((s) => ({
+      regNo: s.reg_no ?? "—",
+      name: s.name ?? "—",
+      gender: genderDisplayLabel(s.gender),
+      team: s.team?.name ?? "—",
+      className: s.class_name ?? "—",
+      category: s.category?.name ?? "—",
+    }));
+    return { columns, rows };
+  }
+
+  const handleExport = async (kind) => {
+    setError(null);
+    setLoadingKind(kind);
+    try {
+      const { columns, rows } = await fetchNonPlacedRows();
+      if (rows.length === 0) {
+        setError("Every student in this selection has at least one placement.");
+        return;
+      }
+
+      if (kind === "excel") {
+        downloadTableExcel({
+          columns,
+          rows,
+          filename: "Non-Placed-Students",
+          filterLabels,
+          allLabel: "All_Students",
+        });
+      } else {
+        await downloadTablePdf({
+          columns,
+          rows,
+          filename: "Non-Placed-Students",
+          filterLabels,
+          allLabel: "All_Students",
+          title: "Students Without Placements",
+          filterSummary: buildFilterSummary(
+            filterLabels.map((label) => ({ value: label })),
+          ),
+          orgName,
+        });
+      }
+      showToast(
+        `Non-placed students exported successfully (${kind === "excel" ? "Excel" : "PDF"}).`,
+        "success",
+      );
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : (err?.message ?? "Could not generate this export.");
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoadingKind(null);
+    }
+  };
+
+  return (
+    <ReportCard
+      icon={ICONS.nonPlaced}
+      title="Non-Placed Students"
+      description="Students who didn't take 1st, 2nd, or 3rd in any event."
+    >
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+        <Field label="Category">
+          <Select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value={ALL}>All categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Gender">
+          <Select
+            value={genderFilter}
+            onChange={(e) => setGenderFilter(e.target.value)}
+          >
+            <option value={ALL}>All / Select…</option>
+            {GENDER_OPTIONS.map((g) => (
+              <option key={g.value} value={g.value}>
+                {g.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Team">
+          <Select
+            value={teamFilter}
+            onChange={(e) => setTeamFilter(e.target.value)}
+          >
+            <option value={ALL}>All teams</option>
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+
+      {error && (
+        <p className="mt-2 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+          {error}
+        </p>
+      )}
+
+      <CardDivider />
+
+      <div className="flex gap-2">
+        <ActionButton
+          onClick={() => handleExport("pdf")}
+          loading={loadingKind === "pdf"}
+          primary
+        >
+          Export Non-Placed (PDF)
+        </ActionButton>
+        <ActionButton
+          onClick={() => handleExport("excel")}
+          loading={loadingKind === "excel"}
+        >
+          Export Non-Placed (Excel)
+        </ActionButton>
+      </div>
+    </ReportCard>
+  );
+}
+
 export default function ReportsPage() {
   const { me } = useAuth();
   const orgName = me?.madrassa?.name ?? null;
@@ -997,6 +1196,12 @@ export default function ReportsPage() {
             categories={categories}
             events={events}
             students={students}
+            orgName={orgName}
+            showToast={showToast}
+          />
+          <NonPlacedStudentsCard
+            categories={categories}
+            teams={teams}
             orgName={orgName}
             showToast={showToast}
           />
