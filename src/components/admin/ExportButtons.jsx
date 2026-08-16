@@ -5,12 +5,15 @@ import autoTable from "jspdf-autotable";
 import {
   PDF_FONT_NAME,
   ensureMalayalamFontFace,
+  ensureArabicFontFace,
   registerMalayalamPdfFont,
 } from "../../lib/pdfFonts.js";
 import {
   containsMalayalam,
+  containsArabic,
   measureWrap,
   drawWrappedText,
+  drawTextLine,
   drawVerticalHeaderText,
 } from "../../lib/richText.js";
 import { generateJudgeSheetsPDF } from "../../lib/judgeSheetsPdf.js";
@@ -244,10 +247,14 @@ export async function exportTableToPdf(
       }
 
       const raw = data.cell.raw;
-      if (typeof raw !== "string" || !containsMalayalam(raw)) return;
+      if (
+        typeof raw !== "string" ||
+        !(containsMalayalam(raw) || containsArabic(raw))
+      )
+        return;
 
       data.cell.text = [];
-      data.cell._milad = { malayalam: raw };
+      data.cell._milad = { text: raw };
 
       const innerWidth =
         data.cell.width -
@@ -301,7 +308,7 @@ export async function exportTableToPdf(
       const textX = isHead ? cell.x + cell.width / 2 : cell.x + padLeft;
       const textY = cell.y + padTop + TABLE_FONT_SIZE * 0.85;
 
-      drawWrappedText(doc, meta.malayalam, textX, textY, {
+      drawWrappedText(doc, meta.text, textX, textY, {
         fontSize: TABLE_FONT_SIZE,
         bold: isHead,
         color: INK,
@@ -313,10 +320,12 @@ export async function exportTableToPdf(
     },
     didDrawPage: (data) => {
       if (data.pageNumber > 1 && title) {
-        doc.setFont(PDF_FONT_NAME, "bold");
-        doc.setFontSize(10.5);
-        doc.setTextColor(...MUTED);
-        doc.text(title, PDF_MARGIN_PT, PDF_MARGIN_PT + 8);
+        drawTextLine(doc, title, PDF_MARGIN_PT, PDF_MARGIN_PT + 8, {
+          fontSize: 10.5,
+          bold: true,
+          color: MUTED,
+          align: "left",
+        });
       }
     },
   });
@@ -421,7 +430,7 @@ export default function ExportButtons({
     setPdfExporting(true);
     try {
       const dynamicFilename = buildFilename();
-      await ensureMalayalamFontFace();
+      await Promise.all([ensureMalayalamFontFace(), ensureArabicFontFace()]);
       const built = buildExportTableNode({ columns, rows });
       await exportTableToPdf(
         built,

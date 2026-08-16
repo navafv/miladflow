@@ -1,11 +1,15 @@
 import {
   MALAYALAM_FONT_FAMILY,
+  ARABIC_FONT_FAMILY,
   PDF_FONT_NAME,
   ensureMalayalamFontFace,
+  ensureArabicFontFace,
 } from "./pdfFonts.js";
 
 const RASTER_SCALE = 6;
 const MALAYALAM_RANGE = /[\u0D00-\u0D7F]/;
+const ARABIC_RANGE =
+  /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
 const MAX_RASTER_WIDTH_PX = 900;
 const ELLIPSIS = "…";
 const RASTER_JPEG_QUALITY = 1;
@@ -14,7 +18,21 @@ export function containsMalayalam(text) {
   return MALAYALAM_RANGE.test(text ?? "");
 }
 
-export { ensureMalayalamFontFace };
+export function containsArabic(text) {
+  return ARABIC_RANGE.test(text ?? "");
+}
+
+function resolveRasterStyle(text) {
+  if (containsArabic(text)) {
+    return { family: ARABIC_FONT_FAMILY, rtl: true };
+  }
+  if (containsMalayalam(text)) {
+    return { family: MALAYALAM_FONT_FAMILY, rtl: false };
+  }
+  return null;
+}
+
+export { ensureMalayalamFontFace, ensureArabicFontFace };
 
 function getMeasureCtx() {
   const canvas = document.createElement("canvas");
@@ -41,9 +59,11 @@ function wrapWithCanvas(ctx, text, maxWidth) {
 
 export function measureWrap(doc, text, maxWidth, fontSize, bold) {
   if (!text) return [""];
-  if (containsMalayalam(text)) {
+  const style = resolveRasterStyle(text);
+  if (style) {
     const ctx = getMeasureCtx();
-    ctx.font = `${bold ? 700 : 400} ${fontSize}px "${MALAYALAM_FONT_FAMILY}"`;
+    ctx.direction = style.rtl ? "rtl" : "ltr";
+    ctx.font = `${bold ? 700 : 400} ${fontSize}px "${style.family}"`;
     return wrapWithCanvas(ctx, text, maxWidth);
   }
   doc.setFont(PDF_FONT_NAME, bold ? "bold" : "normal");
@@ -69,10 +89,11 @@ function truncateToWidth(ctx, text, maxWidth) {
   return text.slice(0, lo) + ELLIPSIS;
 }
 
-function rasterizeLine(text, fontSize, bold, colorRgb, bgRgb) {
+function rasterizeLine(text, fontSize, bold, colorRgb, bgRgb, style) {
   const ctx = getMeasureCtx();
   const weight = bold ? 700 : 400;
-  ctx.font = `${weight} ${fontSize}px "${MALAYALAM_FONT_FAMILY}"`;
+  ctx.direction = style.rtl ? "rtl" : "ltr";
+  ctx.font = `${weight} ${fontSize}px "${style.family}"`;
 
   const safeText = truncateToWidth(ctx, text, MAX_RASTER_WIDTH_PX - 4);
 
@@ -91,12 +112,14 @@ function rasterizeLine(text, fontSize, bold, colorRgb, bgRgb) {
 
   const rctx = canvas.getContext("2d");
   rctx.scale(RASTER_SCALE, RASTER_SCALE);
-  rctx.font = `${weight} ${fontSize}px "${MALAYALAM_FONT_FAMILY}"`;
+  rctx.direction = style.rtl ? "rtl" : "ltr";
+  rctx.font = `${weight} ${fontSize}px "${style.family}"`;
   rctx.textBaseline = "top";
+  rctx.textAlign = style.rtl ? "right" : "left";
   rctx.fillStyle = `rgb(${(bgRgb ?? [255, 255, 255]).join(",")})`;
   rctx.fillRect(0, 0, width, height);
   rctx.fillStyle = `rgb(${colorRgb.join(",")})`;
-  rctx.fillText(safeText, 2, height * 0.12);
+  rctx.fillText(safeText, style.rtl ? width - 2 : 2, height * 0.12);
 
   return {
     dataUrl: canvas.toDataURL("image/jpeg", RASTER_JPEG_QUALITY),
@@ -112,10 +135,12 @@ function rasterizeVerticalLine(
   colorRgb,
   bgRgb,
   maxRunPx,
+  style,
 ) {
   const ctx = getMeasureCtx();
   const weight = bold ? 700 : 400;
-  ctx.font = `${weight} ${fontSize}px "${MALAYALAM_FONT_FAMILY}"`;
+  ctx.direction = style.rtl ? "rtl" : "ltr";
+  ctx.font = `${weight} ${fontSize}px "${style.family}"`;
 
   const safeText = truncateToWidth(ctx, text, maxRunPx - 4);
   const run = Math.max(
@@ -134,10 +159,12 @@ function rasterizeVerticalLine(
   rctx.fillRect(0, 0, thickness, run);
   rctx.translate(0, run);
   rctx.rotate(-Math.PI / 2);
-  rctx.font = `${weight} ${fontSize}px "${MALAYALAM_FONT_FAMILY}"`;
+  rctx.direction = style.rtl ? "rtl" : "ltr";
+  rctx.font = `${weight} ${fontSize}px "${style.family}"`;
   rctx.textBaseline = "top";
+  rctx.textAlign = style.rtl ? "right" : "left";
   rctx.fillStyle = `rgb(${colorRgb.join(",")})`;
-  rctx.fillText(safeText, 2, thickness * 0.12);
+  rctx.fillText(safeText, style.rtl ? run - 2 : 2, thickness * 0.12);
 
   return {
     dataUrl: canvas.toDataURL("image/jpeg", RASTER_JPEG_QUALITY),
@@ -156,6 +183,10 @@ export function drawVerticalHeaderText(
   { fontSize, bold = true, color = [23, 23, 23], bgColor, maxRun } = {},
 ) {
   if (!text) return;
+  const style = resolveRasterStyle(text) ?? {
+    family: MALAYALAM_FONT_FAMILY,
+    rtl: false,
+  };
   const cap = Math.max(20, Math.min(maxRun ?? cellHeight, cellHeight));
   const { dataUrl, width, height } = rasterizeVerticalLine(
     text,
@@ -164,6 +195,7 @@ export function drawVerticalHeaderText(
     color,
     bgColor,
     cap,
+    style,
   );
   const drawX = cellX + (cellWidth - width) / 2;
   const drawY = cellY + (cellHeight - height) / 2;
@@ -179,7 +211,8 @@ export function drawTextLine(
 ) {
   if (!text) return 0;
 
-  if (!containsMalayalam(text)) {
+  const style = resolveRasterStyle(text);
+  if (!style) {
     doc.setFont(PDF_FONT_NAME, bold ? "bold" : "normal");
     doc.setFontSize(fontSize);
     doc.setTextColor(...color);
@@ -193,6 +226,7 @@ export function drawTextLine(
     bold,
     color,
     bgColor,
+    style,
   );
   let imgX = x;
   if (align === "center") imgX = x - width / 2;

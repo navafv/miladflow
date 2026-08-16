@@ -1,8 +1,11 @@
 import notoMalayalamRegularUrl from "../assets/fonts/NotoSansMalayalam-Regular.ttf?url";
 import notoMalayalamBoldUrl from "../assets/fonts/NotoSansMalayalam-Bold.ttf?url";
+import notoArabicRegularUrl from "../assets/fonts/NotoSansArabic-Regular.ttf?url";
+import notoArabicBoldUrl from "../assets/fonts/NotoSansArabic-Bold.ttf?url";
 import { emitToast } from "./toastBus.js";
 
 export const MALAYALAM_FONT_FAMILY = "MiladFlow Export Malayalam";
+export const ARABIC_FONT_FAMILY = "MiladFlow Export Arabic";
 
 const MALAYALAM_PDF_FONT_NAME = "NotoSansMalayalam";
 const FALLBACK_PDF_FONT_NAME = "helvetica";
@@ -10,16 +13,29 @@ const FALLBACK_PDF_FONT_NAME = "helvetica";
 export let PDF_FONT_NAME = MALAYALAM_PDF_FONT_NAME;
 
 const STYLE_TAG_ATTR = "data-milad-export-font";
+const ARABIC_STYLE_TAG_ATTR = "data-milad-export-font-arabic";
 
 let cssReadyPromise = null;
+let arabicCssReadyPromise = null;
 let base64Promise = null;
+let arabicBase64Promise = null;
 let hasWarnedFontFallback = false;
+let hasWarnedArabicFallback = false;
 
 function warnFontFallbackOnce() {
   if (hasWarnedFontFallback) return;
   hasWarnedFontFallback = true;
   emitToast(
     "Malayalam fonts failed to load. Text may not render correctly.",
+    "error",
+  );
+}
+
+function warnArabicFontFallbackOnce() {
+  if (hasWarnedArabicFallback) return;
+  hasWarnedArabicFallback = true;
+  emitToast(
+    "Arabic fonts failed to load. Text may not render correctly.",
     "error",
   );
 }
@@ -55,6 +71,21 @@ function loadFontBase64() {
       });
   }
   return base64Promise;
+}
+
+function loadArabicFontBase64() {
+  if (!arabicBase64Promise) {
+    arabicBase64Promise = Promise.all([
+      fetchAsBase64(notoArabicRegularUrl),
+      fetchAsBase64(notoArabicBoldUrl),
+    ])
+      .then(([regular, bold]) => ({ regular, bold }))
+      .catch((err) => {
+        arabicBase64Promise = null;
+        throw err;
+      });
+  }
+  return arabicBase64Promise;
 }
 
 export function ensureMalayalamFontFace() {
@@ -103,6 +134,54 @@ export function ensureMalayalamFontFace() {
     })();
   }
   return cssReadyPromise;
+}
+
+export function ensureArabicFontFace() {
+  if (!arabicCssReadyPromise) {
+    arabicCssReadyPromise = (async () => {
+      try {
+        const { regular, bold } = await loadArabicFontBase64();
+
+        if (!document.querySelector(`style[${ARABIC_STYLE_TAG_ATTR}]`)) {
+          const style = document.createElement("style");
+          style.setAttribute(ARABIC_STYLE_TAG_ATTR, "true");
+          style.textContent = `
+            @font-face {
+              font-family: "${ARABIC_FONT_FAMILY}";
+              src: url(data:font/ttf;base64,${regular}) format("truetype");
+              font-weight: 400;
+              font-style: normal;
+              font-display: block;
+            }
+            @font-face {
+              font-family: "${ARABIC_FONT_FAMILY}";
+              src: url(data:font/ttf;base64,${bold}) format("truetype");
+              font-weight: 700;
+              font-style: normal;
+              font-display: block;
+            }
+          `;
+          document.head.appendChild(style);
+        }
+
+        await Promise.all([
+          document.fonts.load(`400 16px "${ARABIC_FONT_FAMILY}"`),
+          document.fonts.load(`700 16px "${ARABIC_FONT_FAMILY}"`),
+        ]);
+        await document.fonts.ready;
+      } catch (err) {
+        console.warn(
+          "MiladFlow: could not load the Arabic export font — " +
+            "Arabic text in exported posters/tables may not render " +
+            "correctly, but the export will continue.",
+          err,
+        );
+        warnArabicFontFallbackOnce();
+        arabicCssReadyPromise = null;
+      }
+    })();
+  }
+  return arabicCssReadyPromise;
 }
 
 export async function registerMalayalamPdfFont(doc) {
