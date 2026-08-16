@@ -339,6 +339,178 @@ export async function exportTableToPdf(
   doc.save(`${filename}.pdf`);
 }
 
+const CATEGORY_SECTION_FILL = BRAND;
+const CATEGORY_SECTION_TEXT = WHITE;
+const EVENT_SECTION_FILL = [223, 245, 236];
+const EVENT_SECTION_TEXT = INK;
+
+function sectionRow(content, colSpan, sectionType) {
+  return [{ content, colSpan, __sectionType: sectionType }];
+}
+
+export function buildGroupedResultsBody(sections, columns) {
+  const body = [];
+  for (const section of sections ?? []) {
+    body.push(
+      sectionRow(
+        `${section.categoryName} — ${section.genderLabel}`,
+        columns.length,
+        "category",
+      ),
+    );
+    for (const eventGroup of section.events ?? []) {
+      body.push(sectionRow(eventGroup.eventName, columns.length, "event"));
+      for (const row of eventGroup.rows ?? []) {
+        body.push(columns.map((col) => sanitizeCell(row[col.key])));
+      }
+    }
+  }
+  return body;
+}
+
+export async function exportGroupedResultsToPdf(
+  sections,
+  columns,
+  { orgName, title, filterSummary },
+  filename,
+) {
+  const generatedAt = new Date();
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  await registerMalayalamPdfFont(doc);
+
+  const contentTopPt = drawLetterhead(doc, { orgName, title, filterSummary });
+
+  const head = [columns.map((col) => col.label)];
+  const body = buildGroupedResultsBody(sections, columns);
+
+  autoTable(doc, {
+    head,
+    body,
+    startY: contentTopPt,
+    margin: {
+      left: PDF_MARGIN_PT,
+      right: PDF_MARGIN_PT,
+      top: PDF_MARGIN_PT + 16,
+      bottom: PDF_MARGIN_PT + FOOTER_SPACE_PT,
+    },
+    theme: "grid",
+    styles: {
+      font: PDF_FONT_NAME,
+      fontSize: TABLE_FONT_SIZE,
+      cellPadding: CELL_PADDING,
+      textColor: INK,
+      lineColor: RULE,
+      lineWidth: 0.5,
+      overflow: "linebreak",
+      valign: "top",
+      fillColor: WHITE,
+    },
+    headStyles: {
+      fillColor: WHITE,
+      textColor: INK,
+      fontStyle: "bold",
+      fontSize: TABLE_FONT_SIZE,
+      cellPadding: CELL_PADDING,
+      halign: "center",
+      valign: "middle",
+    },
+    didParseCell: (data) => {
+      const isHead = data.section === "head";
+      const rawCell = data.cell.raw;
+      const sectionType =
+        rawCell && typeof rawCell === "object" ? rawCell.__sectionType : null;
+
+      if (sectionType === "category") {
+        data.cell.styles.fillColor = CATEGORY_SECTION_FILL;
+        data.cell.styles.textColor = CATEGORY_SECTION_TEXT;
+        data.cell.styles.fontStyle = "bold";
+        data.cell.styles.halign = "left";
+      } else if (sectionType === "event") {
+        data.cell.styles.fillColor = EVENT_SECTION_FILL;
+        data.cell.styles.textColor = EVENT_SECTION_TEXT;
+        data.cell.styles.fontStyle = "bold";
+        data.cell.styles.halign = "left";
+      }
+
+      const text = sectionType ? rawCell.content : rawCell;
+      if (
+        !isHead &&
+        typeof text === "string" &&
+        (containsMalayalam(text) || containsArabic(text))
+      ) {
+        data.cell.text = [];
+        data.cell._milad = {
+          text,
+          sectionType,
+        };
+
+        const innerWidth =
+          data.cell.width -
+          data.cell.padding("left") -
+          data.cell.padding("right");
+        const bold = isHead || Boolean(sectionType);
+        const lines = measureWrap(doc, text, innerWidth, TABLE_FONT_SIZE, bold);
+        const lineHeight = TABLE_FONT_SIZE * 1.18;
+        const needed =
+          lines.length * lineHeight +
+          data.cell.padding("top") +
+          data.cell.padding("bottom");
+        if (needed > data.row.height) data.row.height = needed;
+      }
+    },
+    didDrawCell: (data) => {
+      const meta = data.cell._milad;
+      if (!meta) return;
+
+      const isHead = data.section === "head";
+      const { cell } = data;
+      const bgColor =
+        meta.sectionType === "category"
+          ? CATEGORY_SECTION_FILL
+          : meta.sectionType === "event"
+            ? EVENT_SECTION_FILL
+            : WHITE;
+      const textColor =
+        meta.sectionType === "category" ? CATEGORY_SECTION_TEXT : INK;
+
+      const align = isHead ? "center" : "left";
+      const padLeft = cell.padding("left");
+      const padTop = cell.padding("top");
+      const innerWidth = cell.width - padLeft - cell.padding("right");
+      const textX = isHead ? cell.x + cell.width / 2 : cell.x + padLeft;
+      const textY = cell.y + padTop + TABLE_FONT_SIZE * 0.85;
+
+      drawWrappedText(doc, meta.text, textX, textY, {
+        fontSize: TABLE_FONT_SIZE,
+        bold: isHead || Boolean(meta.sectionType),
+        color: textColor,
+        align,
+        maxWidth: innerWidth,
+        lineHeight: TABLE_FONT_SIZE * 1.18,
+        bgColor,
+      });
+    },
+    didDrawPage: (data) => {
+      if (data.pageNumber > 1 && title) {
+        drawTextLine(doc, title, PDF_MARGIN_PT, PDF_MARGIN_PT + 8, {
+          fontSize: 10.5,
+          bold: true,
+          color: MUTED,
+          align: "left",
+        });
+      }
+    },
+  });
+
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i = 0; i < totalPages; i += 1) {
+    doc.setPage(i + 1);
+    drawFooter(doc, generatedAt, i, totalPages);
+  }
+
+  doc.save(`${filename}.pdf`);
+}
+
 export default function ExportButtons({
   columns,
   rows,

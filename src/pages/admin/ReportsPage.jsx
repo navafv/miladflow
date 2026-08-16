@@ -9,6 +9,7 @@ import {
   buildFilterSummary,
   buildExportTableNode,
   exportTableToPdf,
+  exportGroupedResultsToPdf,
 } from "../../components/admin/ExportButtons.jsx";
 import { buildExportFilename } from "../../lib/exportFilename.js";
 import { ensureMalayalamFontFace } from "../../lib/pdfFonts.js";
@@ -569,7 +570,166 @@ function JudgeSheetsCard({ categories, orgName, showToast }) {
   );
 }
 
-function ResultsCard({ categories, events, orgName, showToast }) {
+const GENDER_RANK = { boys: 0, both: 1, mixed: 1, any: 1, girls: 2 };
+
+function genderRank(gender) {
+  const key = String(gender ?? "").toLowerCase();
+  return key in GENDER_RANK ? GENDER_RANK[key] : 1;
+}
+
+function genderGroupLabel(gender) {
+  const key = String(gender ?? "").toLowerCase();
+  if (key === "boys") return "Boys";
+  if (key === "girls") return "Girls";
+  return "Both";
+}
+
+function placeLabel(place) {
+  if (place === 1) return "1st";
+  if (place === 2) return "2nd";
+  if (place === 3) return "3rd";
+  return place != null ? String(place) : "—";
+}
+
+const RESULTS_PDF_COLUMNS = [
+  { key: "placeLabel", label: "Placement" },
+  { key: "winnerName", label: "Name" },
+  { key: "teamName", label: "Team" },
+  { key: "className", label: "Class" },
+  { key: "categoryName", label: "Category" },
+];
+
+function groupAndSortResults(
+  placements,
+  eventsById,
+  studentsById,
+  { categoryOrder = [] } = {},
+) {
+  const categoryRank = new Map(categoryOrder.map((name, i) => [name, i]));
+
+  const enriched = placements.map((p) => {
+    const ev = eventsById.get(p.event?.id ?? p.event_id) ?? p.event ?? {};
+    const categoryName =
+      ev.category?.name ?? ev.category_name ?? "Uncategorized";
+    const eventGender = ev.gender ?? "both";
+
+    let winnerName = "—";
+    let teamName = "—";
+    let className = "—";
+
+    if (p.student || p.student_id) {
+      const sId = p.student?.id ?? p.student_id;
+      const richStudent = studentsById.get(sId);
+      winnerName = richStudent?.name ?? p.student?.name ?? "—";
+      teamName =
+        richStudent?.team?.name ??
+        richStudent?.team_name ??
+        p.student?.team?.name ??
+        p.team?.name ??
+        "—";
+      className =
+        richStudent?.class_name ??
+        richStudent?.className ??
+        richStudent?.class?.name ??
+        "—";
+    } else if (p.group_entry || p.group_entry_id) {
+      const members = p.group_entry?.students ?? [];
+      winnerName = p.group_entry?.display_name ?? p.team?.name ?? "—";
+      teamName = p.team?.name ?? "—";
+      const classNames = [
+        ...new Set(
+          members
+            .map((m) => studentsById.get(m.id)?.class_name)
+            .filter(Boolean),
+        ),
+      ];
+      className = classNames.length > 0 ? classNames.join(", ") : "—";
+    } else if (p.team || p.team_id) {
+      winnerName = p.team?.name ?? "—";
+      teamName = p.team?.name ?? "—";
+    }
+
+    return {
+      categoryName,
+      eventGender,
+      eventName: ev.name ?? p.event?.name ?? "—",
+      place: p.place,
+      placeLabel: placeLabel(p.place),
+      winnerName,
+      teamName,
+      className,
+    };
+  });
+
+  enriched.sort((a, b) => {
+    const rankA = categoryRank.has(a.categoryName)
+      ? categoryRank.get(a.categoryName)
+      : Infinity;
+    const rankB = categoryRank.has(b.categoryName)
+      ? categoryRank.get(b.categoryName)
+      : Infinity;
+    if (rankA !== rankB) return rankA - rankB;
+    if (rankA === Infinity && a.categoryName !== b.categoryName) {
+      return a.categoryName.localeCompare(b.categoryName);
+    }
+
+    const genderCmp = genderRank(a.eventGender) - genderRank(b.eventGender);
+    if (genderCmp !== 0) return genderCmp;
+
+    const eventCmp = a.eventName.localeCompare(b.eventName);
+    if (eventCmp !== 0) return eventCmp;
+
+    return (a.place ?? 0) - (b.place ?? 0);
+  });
+
+  const sections = [];
+  for (const row of enriched) {
+    const genderLabel = genderGroupLabel(row.eventGender);
+    let section = sections[sections.length - 1];
+    if (
+      !section ||
+      section.categoryName !== row.categoryName ||
+      section.genderLabel !== genderLabel
+    ) {
+      section = { categoryName: row.categoryName, genderLabel, events: [] };
+      sections.push(section);
+    }
+
+    let eventGroup = section.events[section.events.length - 1];
+    if (!eventGroup || eventGroup.eventName !== row.eventName) {
+      eventGroup = { eventName: row.eventName, rows: [] };
+      section.events.push(eventGroup);
+    }
+    eventGroup.rows.push(row);
+  }
+
+  return sections;
+}
+
+async function downloadGroupedResultsPdf({
+  sections,
+  filename,
+  filterLabels = [],
+  allLabel = "All",
+  title,
+  filterSummary,
+  orgName,
+}) {
+  await ensureMalayalamFontFace();
+  const dynamicFilename = buildExportFilename({
+    baseName: filename,
+    filters: filterLabels,
+    allLabel,
+  });
+  await exportGroupedResultsToPdf(
+    sections,
+    RESULTS_PDF_COLUMNS,
+    { orgName, title, filterSummary },
+    dynamicFilename,
+  );
+}
+
+function ResultsCard({ categories, events, students, orgName, showToast }) {
   const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [allResults, setAllResults] = useState(true);
   const [loadingKind, setLoadingKind] = useState(null);
@@ -592,6 +752,7 @@ function ResultsCard({ categories, events, orgName, showToast }) {
       : (leaderboardRaw?.results ?? []);
 
     const eventsById = new Map(events.map((ev) => [ev.id, ev]));
+    const studentsById = new Map(students.map((s) => [s.id, s]));
 
     const scopedPlacements = placements.filter((p) => {
       if (allResults || categoryFilter === ALL) return true;
@@ -599,6 +760,12 @@ function ResultsCard({ categories, events, orgName, showToast }) {
       const evCategoryId = ev?.category?.id ?? ev?.category_id;
       return String(evCategoryId) === String(categoryFilter);
     });
+
+    const sections = groupAndSortResults(
+      scopedPlacements,
+      eventsById,
+      studentsById,
+    );
 
     const columns = [
       { key: "eventName", label: "Event" },
@@ -634,14 +801,14 @@ function ResultsCard({ categories, events, orgName, showToast }) {
       }))
       .sort((a, b) => b.points - a.points);
 
-    return { columns, rows, standingsColumns, standingsRows };
+    return { columns, rows, standingsColumns, standingsRows, sections };
   }
 
   const handleExport = async (kind) => {
     setError(null);
     setLoadingKind(kind);
     try {
-      const { columns, rows, standingsColumns, standingsRows } =
+      const { columns, rows, standingsColumns, standingsRows, sections } =
         await fetchResultRows();
       if (rows.length === 0) {
         setError("No results recorded for this selection yet.");
@@ -684,9 +851,8 @@ function ResultsCard({ categories, events, orgName, showToast }) {
         }
         XLSX.writeFile(workbook, `${dynamicFilename}.xlsx`);
       } else {
-        await downloadTablePdf({
-          columns,
-          rows,
+        await downloadGroupedResultsPdf({
+          sections,
           filename: "Results",
           filterLabels,
           allLabel: "All_Results",
@@ -796,10 +962,12 @@ export default function ReportsPage() {
     useApiResource("/categories/");
   const { data: teams, loading: teamsLoading } = useApiResource("/teams/");
   const { data: events, loading: eventsLoading } = useApiResource("/events/");
+  const { data: students, loading: studentsLoading } =
+    useApiResource("/students/");
   const { toast, showToast, dismiss } = useToast();
 
   const loadingFoundationData =
-    categoriesLoading || teamsLoading || eventsLoading;
+    categoriesLoading || teamsLoading || eventsLoading || studentsLoading;
 
   return (
     <div>
@@ -828,6 +996,7 @@ export default function ReportsPage() {
           <ResultsCard
             categories={categories}
             events={events}
+            students={students}
             orgName={orgName}
             showToast={showToast}
           />

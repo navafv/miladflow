@@ -3,20 +3,18 @@ import { useParams } from "react-router-dom";
 import { usePublicPoll } from "../lib/usePublicResource.js";
 import PublicUnavailable from "./PublicUnavailable.jsx";
 
-const MASTER_ROTATE_MS = 12_000; // Display time per Leaderboard slide
-const INNER_ROTATE_MS = 8_000; // Display time per Schedule/Results slide
+const MASTER_ROTATE_MS = 12_000;
+const INNER_ROTATE_MS = 8_000;
 
-const TEAMS_PAGE_SIZE = 3; // 3 Teams max per slide
-const HAPPENING_PAGE_SIZE = 6; // 2 columns x 3 rows
-const RESULTS_PAGE_SIZE = 3; // 3 columns x 1 row (Tall majestic cards)
+const TEAMS_PAGE_SIZE = 3;
+const HAPPENING_PAGE_SIZE = 6;
+const RESULTS_PAGE_SIZE = 3;
 
 const PLACE_COLORS = {
   1: "#21F1A8",
   2: "#38bdf8",
   3: "#fbbf24",
 };
-
-// --- Utilities ---
 
 function isToday(isoValue) {
   if (!isoValue) return false;
@@ -96,7 +94,6 @@ function normalizeScheduleItem(item) {
   };
 }
 
-// Strictly sort chronologically by scheduled time
 function sortHappeningNow(events) {
   return [...events].sort((a, b) => {
     const timeA = a.time ? new Date(a.time).getTime() : Infinity;
@@ -141,7 +138,7 @@ function groupPlacementsByEvent(placements) {
         eventName: p.eventName,
         category: p.category,
         gender: p.gender,
-        entries: { 1: [], 2: [], 3: [] }, // Support multiple winners per place
+        entries: { 1: [], 2: [], 3: [] },
       });
     }
     if (p.place && groups.get(key).entries[p.place]) {
@@ -151,8 +148,6 @@ function groupPlacementsByEvent(placements) {
 
   return [...groups.values()].reverse();
 }
-
-// --- Components ---
 
 function useClock() {
   const [now, setNow] = useState(() => new Date());
@@ -308,8 +303,6 @@ function DashboardHeader({ madrassaName }) {
   );
 }
 
-// --- Team Leaderboard Sub-components ---
-
 function OngoingBanner({ ongoingEvents }) {
   if (!ongoingEvents || ongoingEvents.length === 0) return null;
   return (
@@ -458,8 +451,6 @@ function EpicLeaderboard({
   );
 }
 
-// --- Schedule Sub-components ---
-
 function StatusBadge({ status }) {
   if (status === "ongoing") {
     return (
@@ -575,8 +566,6 @@ function HappeningNow({ events, pageIndex, pageCount }) {
   );
 }
 
-// --- Results Sub-components ---
-
 function medalLabel(place) {
   if (place === 1) return "1st";
   if (place === 2) return "2nd";
@@ -672,7 +661,6 @@ function LatestResults({ groupedResults, pageIndex, pageCount }) {
             key={g.eventId}
             className="flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#1a1a1a]"
           >
-            {/* Dedicated Event Header Container */}
             <div className="flex flex-col items-center text-center gap-3 border-b border-slate-200 bg-gradient-to-br from-slate-50 to-white px-6 py-6 dark:border-white/5 dark:from-[#111] dark:to-[#1a1a1a]">
               <h4 className="line-clamp-2 text-balance text-2xl font-black uppercase tracking-tight text-slate-900 dark:text-white lg:text-3xl 2xl:text-4xl">
                 {g.eventName}
@@ -693,7 +681,6 @@ function LatestResults({ groupedResults, pageIndex, pageCount }) {
               </div>
             </div>
 
-            {/* Scrollable Winners Body */}
             <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-6 py-6 [scrollbar-width:none] lg:gap-8 lg:px-8 lg:py-8 2xl:gap-10 2xl:px-10 2xl:py-10 [&::-webkit-scrollbar]:hidden">
               <ResultPlaceGroup place={1} entries={g.entries[1]} />
               <ResultPlaceGroup place={2} entries={g.entries[2]} />
@@ -712,8 +699,6 @@ function LatestResults({ groupedResults, pageIndex, pageCount }) {
   );
 }
 
-// --- Main Component ---
-
 export default function LiveTvDashboard() {
   const { slug } = useParams();
 
@@ -731,7 +716,6 @@ export default function LiveTvDashboard() {
   const schedule = usePublicPoll(
     slug && festivalConfirmed ? `/public/${slug}/schedule/` : null,
   );
-  // Requested 500 to ensure ALL results are safely captured for the slide pagination loop
   const results = usePublicPoll(
     slug && festivalConfirmed ? `/public/${slug}/results/?page_size=500` : null,
   );
@@ -744,7 +728,7 @@ export default function LiveTvDashboard() {
 
   const events = useMemo(() => {
     const items = Array.isArray(schedule.data) ? schedule.data : [];
-    return items.map(normalizeScheduleItem).filter((e) => isToday(e.time)); // Restrict strictly to TODAY's events
+    return items.map(normalizeScheduleItem).filter((e) => isToday(e.time));
   }, [schedule.data]);
 
   const ongoingEvents = useMemo(() => {
@@ -759,7 +743,6 @@ export default function LiveTvDashboard() {
     return groupPlacementsByEvent(normalized);
   }, [results.data]);
 
-  // --- Centralized Slide State Machine ---
   const SLIDE_LEADERBOARD = 0;
   const SLIDE_SCHEDULE = 1;
   const SLIDE_RESULTS = 2;
@@ -787,7 +770,6 @@ export default function LiveTvDashboard() {
     let timeoutId;
     const { slide, page } = slideState;
 
-    // Fallback bounds check if data vanishes dynamically
     if (slide === SLIDE_LEADERBOARD && page >= leaderboardPageCount) {
       setSlideState({ slide: SLIDE_SCHEDULE, page: 0 });
       return;
@@ -834,7 +816,6 @@ export default function LiveTvDashboard() {
     return <PublicUnavailable />;
   }
 
-  // Calculate the paginated chunk of teams to show on the current Leaderboard slide
   const pagedTeams = useMemo(() => {
     return rankedTeams
       .slice(
@@ -875,7 +856,6 @@ export default function LiveTvDashboard() {
 
       <DashboardHeader madrassaName={festival?.name ?? "—"} />
 
-      {/* Main Slide Content Area */}
       <main className="flex min-h-0 flex-1 px-6 pb-6 lg:px-10 lg:pb-8 2xl:px-14 2xl:pb-10">
         {slideState.slide === SLIDE_LEADERBOARD && (
           <EpicLeaderboard
@@ -904,7 +884,6 @@ export default function LiveTvDashboard() {
         )}
       </main>
 
-      {/* Global Slide Progress Indicator */}
       <div className="absolute bottom-0 left-0 flex w-full items-center justify-center gap-3 pb-4">
         {SLIDES.map((_, i) => (
           <div
