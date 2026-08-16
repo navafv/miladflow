@@ -347,17 +347,34 @@ const StudentPoster = forwardRef(function StudentPoster(
         <div
           className={`flex flex-nowrap items-center justify-between rounded-2xl p-4 ${t.footerCard}`}
         >
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <p
-              className={`whitespace-nowrap text-[9px] font-black uppercase tracking-[0.22em] ${t.footerLabel}`}
-            >
-              Participant ID
-            </p>
-            <p
-              className={`truncate font-mono text-xl font-bold tracking-wider ${t.footerValue}`}
-            >
-              {uid ?? "—"}
-            </p>
+          <div className="flex flex-1 min-w-0 items-center justify-between pr-6">
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <p
+                className={`whitespace-nowrap text-[9px] font-black uppercase tracking-[0.22em] ${t.footerLabel}`}
+              >
+                Participant ID
+              </p>
+              <p
+                className={`truncate font-mono text-xl font-bold tracking-wider ${t.footerValue}`}
+              >
+                {uid ?? "—"}
+              </p>
+            </div>
+
+            {teamText && (
+              <div className="flex min-w-0 flex-col items-end gap-1.5 text-right pl-4">
+                <p
+                  className={`whitespace-nowrap text-[9px] font-black uppercase tracking-[0.22em] ${t.footerLabel}`}
+                >
+                  Team
+                </p>
+                <p
+                  className={`truncate text-lg font-bold tracking-wider ${t.footerValue}`}
+                >
+                  {teamText}
+                </p>
+              </div>
+            )}
           </div>
           <div className={`flex-shrink-0 rounded-xl p-2 ${t.qrCardBg}`}>
             {hasValidQrTarget ? (

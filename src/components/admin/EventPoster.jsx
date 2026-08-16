@@ -122,24 +122,35 @@ function WinnerNames({
 
   return (
     <div className="mt-2.5 space-y-2.5">
-      {visible.map((n, i) => (
-        <div key={n?.id ?? i} className="max-w-full">
-          <p
-            className={`${nameMaxWidth} truncate ${nameClass}`}
-            title={n?.name || "Unnamed"}
-          >
-            {n?.name || "Unnamed"}
-          </p>
-          {n?.team && (
-            <span
-              className={`mt-1 inline-block flex-shrink-0 ${teamMaxWidth} truncate whitespace-nowrap rounded-full px-2.5 py-0.5 align-bottom text-[10px] font-bold uppercase tracking-wider ${teamPillClass}`}
-              title={n.team}
+      {visible.map((n, i) => {
+        const displayName =
+          n?.name || n?.winner_name || n?.student_name || "Unnamed";
+        const displayTeam =
+          n?.team ||
+          n?.team_name ||
+          n?.student_team_name ||
+          n?.student?.team?.name ||
+          null;
+
+        return (
+          <div key={n?.id ?? i} className="max-w-full">
+            <p
+              className={`${nameMaxWidth} truncate ${nameClass}`}
+              title={displayName}
             >
-              {n.team}
-            </span>
-          )}
-        </div>
-      ))}
+              {displayName}
+            </p>
+            {displayTeam && (
+              <span
+                className={`mt-1 inline-block flex-shrink-0 ${teamMaxWidth} truncate whitespace-nowrap rounded-full px-2.5 py-0.5 align-bottom text-[10px] font-bold uppercase tracking-wider ${teamPillClass}`}
+                title={displayTeam}
+              >
+                {displayTeam}
+              </span>
+            )}
+          </div>
+        );
+      })}
 
       {overflow > 0 && (
         <p

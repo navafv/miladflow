@@ -28,28 +28,51 @@ function placementMatchesRow(placement, rowId, kind) {
   );
 }
 
-function toWinnerLabel(placement) {
-  if (placement.student) {
+function toWinnerLabel(
+  placement,
+  studentsList = [],
+  groupEntriesList = [],
+  teamsList = [],
+) {
+  if (placement.student || placement.student_id) {
+    const sId =
+      placement.student?.id ?? placement.student_id ?? placement.student;
+    const richStudent = studentsList.find((s) => s.id === sId);
     return {
-      id: placement.student.id,
-      name: placement.student.name,
-      team: placement.student.team?.name ?? "",
+      id: sId,
+      name: richStudent?.name ?? placement.student?.name ?? "",
+      team:
+        richStudent?.team?.name ??
+        placement.student?.team?.name ??
+        placement.team?.name ??
+        "",
       isGroup: false,
     };
   }
-  if (placement.group_entry) {
-    const ge = placement.group_entry;
+  if (placement.group_entry || placement.group_entry_id) {
+    const geId =
+      placement.group_entry?.id ??
+      placement.group_entry_id ??
+      placement.group_entry;
+    const richGe = groupEntriesList.find((ge) => ge.id === geId);
     return {
-      id: ge.id,
-      name: ge.display_name || ge.captain?.name || placement.team?.name,
-      team: placement.team?.name ?? "",
+      id: geId,
+      name:
+        richGe?.display_name ||
+        richGe?.captain?.name ||
+        placement.group_entry?.display_name ||
+        placement.team?.name ||
+        "",
+      team: richGe?.team?.name ?? placement.team?.name ?? "",
       isGroup: true,
     };
   }
-  if (placement.team) {
+  if (placement.team || placement.team_id) {
+    const tId = placement.team?.id ?? placement.team_id ?? placement.team;
+    const richTeam = teamsList.find((t) => t.id === tId);
     return {
-      id: placement.team.id,
-      name: placement.team.name,
+      id: tId,
+      name: richTeam?.name ?? placement.team?.name ?? "",
       team: "",
       isGroup: true,
     };
@@ -197,13 +220,13 @@ export default function ResultsPage() {
   }, [isIndividual, registeredStudents, groupEntries, teams]);
 
   const winners = useMemo(() => {
-    const label = (p) => toWinnerLabel(p);
+    const label = (p) => toWinnerLabel(p, students, groupEntries, teams);
     return {
       1: first ? [label(first)].filter(Boolean) : [],
       2: second ? [label(second)].filter(Boolean) : [],
       3: thirds.map(label).filter(Boolean),
     };
-  }, [first, second, thirds]);
+  }, [first, second, thirds, students, groupEntries, teams]);
 
   const hasAnyWinner =
     winners[1].length + winners[2].length + winners[3].length > 0;
