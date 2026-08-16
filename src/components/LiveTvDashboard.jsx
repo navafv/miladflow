@@ -3,8 +3,11 @@ import { useParams } from "react-router-dom";
 import { usePublicPoll } from "../lib/usePublicResource.js";
 import PublicUnavailable from "./PublicUnavailable.jsx";
 
-const POLL_INTERVAL_MS = 15_000;
-const ROTATE_INTERVAL_MS = 7_000;
+const MASTER_ROTATE_MS = 15_000;
+const INNER_ROTATE_MS = 7_000;
+
+const HAPPENING_PAGE_SIZE = 6; // 2 columns x 3 rows
+const RESULTS_PAGE_SIZE = 4; // 2 columns x 2 rows
 
 const PLACE_COLORS = {
   1: "#21F1A8",
@@ -12,7 +15,7 @@ const PLACE_COLORS = {
   3: "#fbbf24",
 };
 
-function useRotatingPages(items, pageSize, intervalMs = ROTATE_INTERVAL_MS) {
+function useRotatingPages(items, pageSize, intervalMs = INNER_ROTATE_MS) {
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
   const [pageIndex, setPageIndex] = useState(0);
 
@@ -36,11 +39,14 @@ function useRotatingPages(items, pageSize, intervalMs = ROTATE_INTERVAL_MS) {
 
   return { page, pageIndex: safeIndex, pageCount };
 }
+
 function normalizeTeam(row) {
   return {
     id: row.team_id,
     name: row.team_name,
     points: Number(row.total_points ?? 0),
+    boysPoints: Number(row.boys_points ?? 0),
+    girlsPoints: Number(row.girls_points ?? 0),
   };
 }
 
@@ -239,13 +245,13 @@ function FullscreenToggle() {
 function PageDots({ count, activeIndex, color }) {
   if (count <= 1) return null;
   return (
-    <div className="mt-3 flex shrink-0 items-center justify-center gap-1.5">
+    <div className="mt-4 flex shrink-0 items-center justify-center gap-2">
       {Array.from({ length: count }).map((_, i) => (
         <span
           key={i}
-          className="h-1.5 rounded-full transition-all duration-500"
+          className="h-2 rounded-full transition-all duration-500"
           style={{
-            width: i === activeIndex ? "1.25rem" : "0.375rem",
+            width: i === activeIndex ? "2rem" : "0.5rem",
             backgroundColor:
               i === activeIndex ? color : "rgba(148,163,184,0.35)",
           }}
@@ -257,17 +263,17 @@ function PageDots({ count, activeIndex, color }) {
 
 function DashboardHeader({ madrassaName }) {
   return (
-    <header className="flex shrink-0 items-center justify-between px-6 py-3 lg:px-10 lg:py-4 2xl:px-14">
-      <h1 className="truncate text-xl font-bold tracking-tight text-slate-900 dark:text-white lg:text-2xl 2xl:text-3xl">
+    <header className="flex shrink-0 items-center justify-between px-6 py-4 lg:px-10 lg:py-6 2xl:px-14">
+      <h1 className="truncate text-2xl font-bold tracking-tight text-slate-900 dark:text-white lg:text-3xl 2xl:text-4xl">
         {madrassaName}
       </h1>
 
-      <div className="flex items-center gap-2.5 rounded-full border border-red-500/20 bg-red-500/10 px-4 py-1.5">
-        <span className="relative flex h-2.5 w-2.5">
+      <div className="flex items-center gap-3 rounded-full border border-red-500/20 bg-red-500/10 px-5 py-2">
+        <span className="relative flex h-3 w-3">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+          <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
         </span>
-        <span className="text-xs font-bold uppercase tracking-[0.3em] text-red-500 dark:text-red-400">
+        <span className="text-sm font-bold uppercase tracking-[0.3em] text-red-500 dark:text-red-400">
           Live
         </span>
       </div>
@@ -287,14 +293,14 @@ function TeamClashCard({ team, maxPoints, rank }) {
 
   return (
     <div
-      className="relative flex flex-1 flex-col justify-between overflow-hidden rounded-2xl border bg-white px-5 py-4 dark:bg-[#141414] lg:px-7 lg:py-5 2xl:px-9 2xl:py-6"
+      className="relative flex h-full w-full flex-col justify-between overflow-hidden rounded-3xl border bg-white px-6 py-8 shadow-xl dark:bg-[#141414] lg:px-10 lg:py-10 2xl:px-12 2xl:py-12"
       style={{
         borderColor: isLeading ? `${color}55` : undefined,
-        boxShadow: isLeading ? `0 0 40px -12px ${color}66` : undefined,
+        boxShadow: isLeading ? `0 0 60px -12px ${color}66` : undefined,
       }}
     >
       <div
-        className={`pointer-events-none absolute inset-0 rounded-2xl border ${
+        className={`pointer-events-none absolute inset-0 rounded-3xl border ${
           isLeading ? "" : "border-slate-200 dark:border-white/10"
         }`}
       />
@@ -302,47 +308,60 @@ function TeamClashCard({ team, maxPoints, rank }) {
       {isLeading && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -top-16 left-1/2 h-40 w-40 -translate-x-1/2 rounded-full opacity-25 blur-[70px]"
+          className="pointer-events-none absolute -top-16 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full opacity-25 blur-[90px]"
           style={{ background: color }}
         />
       )}
 
       <div className="relative z-10 flex items-center justify-between">
         <span
-          className="rounded-full px-3 py-0.5 text-xs font-bold uppercase tracking-widest lg:text-sm"
+          className="rounded-full px-4 py-1 text-sm font-bold uppercase tracking-widest lg:text-base 2xl:text-lg"
           style={{ color, backgroundColor: `${color}1a` }}
         >
           {isLeading ? "Leading" : `#${rank + 1}`}
         </span>
         <span
-          className="h-3 w-3 rounded-full lg:h-3.5 lg:w-3.5"
-          style={{ backgroundColor: color, boxShadow: `0 0 10px 2px ${color}` }}
+          className="h-4 w-4 rounded-full lg:h-5 lg:w-5"
+          style={{ backgroundColor: color, boxShadow: `0 0 15px 3px ${color}` }}
         />
       </div>
 
-      <h2 className="relative z-10 mt-1 truncate text-2xl font-extrabold text-slate-900 dark:text-white lg:text-3xl 2xl:text-4xl">
-        {team.name}
-      </h2>
+      <div className="mb-auto mt-auto flex flex-col gap-2">
+        <h2 className="relative z-10 line-clamp-2 text-balance text-center text-3xl font-extrabold text-slate-900 dark:text-white lg:text-4xl 2xl:text-5xl">
+          {team.name}
+        </h2>
+        <div className="relative z-10 mt-2 flex items-baseline justify-center gap-3">
+          <span
+            className="text-7xl font-black leading-none tracking-tighter lg:text-8xl 2xl:text-[140px]"
+            style={{ color }}
+          >
+            {team.points}
+          </span>
+          <span className="text-xl font-semibold text-slate-500 dark:text-slate-400 lg:text-2xl 2xl:text-4xl">
+            pts
+          </span>
+        </div>
 
-      <div className="relative z-10 mt-1 flex items-baseline gap-2">
-        <span
-          className="text-5xl font-black leading-none tracking-tighter lg:text-6xl 2xl:text-7xl"
-          style={{ color }}
-        >
-          {team.points}
-        </span>
-        <span className="text-base font-semibold text-slate-500 dark:text-slate-400 lg:text-lg 2xl:text-xl">
-          pts
-        </span>
+        {/* Boys & Girls Breakdown */}
+        <div className="relative z-10 mt-3 flex items-center justify-center gap-4 text-sm font-bold text-slate-500 dark:text-slate-400 lg:text-base 2xl:text-xl">
+          <span className="flex items-center gap-2">
+            <div className="h-2.5 w-2.5 rounded-full bg-[#38bdf8]" />
+            Boys: {team.boysPoints}
+          </span>
+          <span className="flex items-center gap-2">
+            <div className="h-2.5 w-2.5 rounded-full bg-[#fbbf24]" />
+            Girls: {team.girlsPoints}
+          </span>
+        </div>
       </div>
 
-      <div className="relative z-10 mt-3 h-3.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/5 lg:h-4">
+      <div className="relative z-10 mt-auto h-4 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/5 lg:h-6 2xl:h-8">
         <div
           className="h-full rounded-full transition-all duration-1000 ease-out"
           style={{
             width: `${fillPct}%`,
             background: `linear-gradient(90deg, ${color}99, ${color})`,
-            boxShadow: `0 0 16px 0 ${color}88`,
+            boxShadow: `0 0 20px 0 ${color}88`,
           }}
         />
       </div>
@@ -357,35 +376,36 @@ function EpicLeaderboard({ teams }) {
   );
   const maxPoints = ranked[0]?.points ?? 0;
 
+  // Smart flex layout logic based on total teams
+  const getWidthClass = (total) => {
+    if (total <= 3) return "w-[calc(100%/3-1rem)] flex-1 min-w-[30%]";
+    if (total === 4) return "w-[calc(50%-1rem)]";
+    return "w-[calc(100%/3-1.5rem)] min-w-[30%]"; // For 5 teams: 3 top, 2 bottom centered
+  };
+
   return (
-    <section className="flex shrink-0 gap-4 px-6 pb-4 lg:gap-6 lg:px-10 lg:pb-5 2xl:gap-8 2xl:px-14">
+    <section className="tv-slide flex h-full w-full flex-wrap content-center justify-center gap-4 lg:gap-6 2xl:gap-8">
       {ranked.map((team, i) => (
-        <TeamClashCard
-          key={team.id}
-          team={team}
-          maxPoints={maxPoints}
-          rank={i}
-        />
+        <div key={team.id} className={`flex ${getWidthClass(teams.length)}`}>
+          <TeamClashCard team={team} maxPoints={maxPoints} rank={i} />
+        </div>
       ))}
     </section>
   );
 }
 
-const HAPPENING_PAGE_SIZE = 3;
-const RESULTS_PAGE_SIZE = 2;
-
 function StatusBadge({ status }) {
   if (status === "ongoing") {
     return (
-      <span className="tv-pulse ml-3 flex shrink-0 items-center gap-1.5 rounded-full bg-[#21F1A8] px-3 py-1 text-xs font-black uppercase tracking-wide text-black lg:text-sm">
-        <span className="h-1.5 w-1.5 rounded-full bg-black/70" />
+      <span className="tv-pulse ml-3 flex shrink-0 items-center gap-1.5 rounded-full bg-[#21F1A8] px-4 py-1.5 text-xs font-black uppercase tracking-wide text-black lg:text-sm 2xl:text-base">
+        <span className="h-2 w-2 rounded-full bg-black/70" />
         Live Now
       </span>
     );
   }
   if (status === "paused") {
     return (
-      <span className="ml-3 shrink-0 rounded-full bg-amber-400/15 px-3 py-1 text-xs font-black uppercase tracking-wide text-amber-500 dark:text-amber-400 lg:text-sm">
+      <span className="ml-3 shrink-0 rounded-full bg-amber-400/15 px-4 py-1.5 text-xs font-black uppercase tracking-wide text-amber-500 dark:text-amber-400 lg:text-sm 2xl:text-base">
         Paused
       </span>
     );
@@ -401,23 +421,23 @@ function HappeningNow({ events }) {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-[#141414] lg:p-7 2xl:p-9">
-      <div className="mb-3 flex shrink-0 items-center gap-2.5 lg:mb-4">
+    <div className="tv-slide flex h-full w-full flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-[#141414] lg:p-10 2xl:p-12">
+      <div className="mb-6 flex shrink-0 items-center gap-4 lg:mb-8">
         <span
-          className="h-2.5 w-2.5 rounded-full bg-[#21F1A8]"
-          style={{ boxShadow: "0 0 10px 2px #21F1A8" }}
+          className="h-4 w-4 rounded-full bg-[#21F1A8]"
+          style={{ boxShadow: "0 0 15px 3px #21F1A8" }}
         />
-        <h3 className="text-lg font-bold uppercase tracking-wide text-slate-900 dark:text-white lg:text-xl 2xl:text-2xl">
-          Happening Now
+        <h3 className="text-2xl font-bold uppercase tracking-wide text-slate-900 dark:text-white lg:text-4xl 2xl:text-5xl">
+          Happening Now & Upcoming
         </h3>
       </div>
 
       <div
         key={pageIndex}
-        className="tv-fade grid min-h-0 flex-1 grid-rows-3 gap-3 lg:gap-4"
+        className="tv-fade grid min-h-0 flex-1 grid-cols-2 grid-rows-3 gap-5 lg:gap-8 2xl:gap-10"
       >
         {page.length === 0 && (
-          <div className="row-span-3 flex items-center justify-center text-base text-slate-400 dark:text-slate-500">
+          <div className="col-span-2 row-span-3 flex items-center justify-center text-xl text-slate-400 dark:text-slate-500 2xl:text-3xl">
             Nothing scheduled right now.
           </div>
         )}
@@ -427,45 +447,50 @@ function HappeningNow({ events }) {
           return (
             <div
               key={e.id}
-              className={`flex items-center justify-between rounded-xl border px-4 dark:bg-white/[0.03] lg:px-5 ${
+              className={`flex flex-col justify-center rounded-2xl border px-6 py-4 dark:bg-white/[0.03] lg:px-8 lg:py-6 2xl:px-10 2xl:py-8 ${
                 isOngoing
-                  ? "border-[#21F1A8]/40 bg-[#21F1A8]/[0.06] dark:border-[#21F1A8]/30"
+                  ? "border-[#21F1A8]/40 bg-[#21F1A8]/[0.06] shadow-[0_0_30px_-10px_#21F1A855] dark:border-[#21F1A8]/30"
                   : isPaused
                     ? "border-amber-400/30 bg-amber-400/[0.06] dark:border-amber-400/20"
                     : "border-slate-100 bg-slate-50 dark:border-white/5"
               }`}
             >
+              <div className="mb-4 flex items-start justify-between">
+                <span className="shrink-0 rounded-full bg-[#21F1A8]/10 px-4 py-1.5 text-base font-bold text-[#0d9e73] dark:text-[#21F1A8] lg:text-lg 2xl:text-2xl">
+                  {formatTime(e.time)}
+                </span>
+                <StatusBadge status={e.status} />
+              </div>
               <div className="min-w-0">
                 <p
-                  className={`text-lg font-bold leading-snug lg:text-xl 2xl:text-2xl ${
+                  className={`line-clamp-2 text-balance text-2xl font-bold leading-tight lg:text-3xl 2xl:text-4xl ${
                     isPaused
                       ? "text-slate-500 dark:text-slate-400"
                       : "text-slate-900 dark:text-white"
                   }`}
                 >
                   {e.eventName}
+                </p>
+                <div className="mt-3 flex items-center gap-3">
+                  <p className="line-clamp-1 text-lg text-slate-500 dark:text-slate-400 lg:text-xl 2xl:text-2xl">
+                    {e.venue}
+                  </p>
                   {e.categoryTag && (
-                    <span className="ml-1.5 text-sm font-medium text-slate-500 dark:text-slate-400 lg:text-base">
-                      {e.categoryTag}
-                    </span>
+                    <>
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300 dark:bg-slate-700" />
+                      <span className="line-clamp-1 text-lg font-medium text-slate-500 dark:text-slate-400 lg:text-xl 2xl:text-2xl">
+                        {e.categoryTag}
+                      </span>
+                    </>
                   )}
-                </p>
-                <p className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400 lg:text-base 2xl:text-lg">
-                  {e.venue}
-                </p>
-              </div>
-              <div className="ml-3 flex shrink-0 items-center">
-                <span className="shrink-0 rounded-full bg-[#21F1A8]/10 px-3 py-1 text-sm font-bold text-[#0d9e73] dark:text-[#21F1A8] lg:text-base">
-                  {formatTime(e.time)}
-                </span>
-                <StatusBadge status={e.status} />
+                </div>
               </div>
             </div>
           );
         })}
         {page.length > 0 &&
           Array.from({ length: HAPPENING_PAGE_SIZE - page.length }).map(
-            (_, i) => <div key={`pad-${i}`} />,
+            (_, i) => <div key={`pad-${i}`} className="hidden lg:block" />,
           )}
       </div>
 
@@ -485,41 +510,45 @@ function ResultRow({ place, entry }) {
 
   if (!entry) {
     return (
-      <div className="flex items-center gap-3 opacity-40">
+      <div className="flex items-center gap-4 opacity-40">
         <span
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black lg:h-9 lg:w-9"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-black lg:h-12 lg:w-12 2xl:h-16 2xl:w-16 2xl:text-xl"
           style={{ color, backgroundColor: `${color}1a` }}
         >
           {medalLabel(place)}
         </span>
-        <p className="text-sm text-slate-400 dark:text-slate-500">—</p>
+        <p className="text-lg text-slate-400 dark:text-slate-500 2xl:text-2xl">
+          —
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-start gap-4">
       <span
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black lg:h-9 lg:w-9"
+        className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-black lg:h-12 lg:w-12 2xl:h-16 2xl:w-16 2xl:text-xl"
         style={{
           color,
           backgroundColor: `${color}1a`,
-          boxShadow: `0 0 8px 0 ${color}55`,
+          boxShadow: `0 0 12px 0 ${color}55`,
         }}
       >
         {medalLabel(place)}
       </span>
-      <div className="min-w-0">
-        <p className="flex items-center gap-1.5 truncate text-base font-bold text-slate-900 dark:text-white lg:text-lg 2xl:text-xl">
-          <span className="truncate">{entry.name}</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start gap-2">
+          <p className="line-clamp-2 text-balance text-xl font-bold leading-snug text-slate-900 dark:text-white lg:text-2xl 2xl:text-3xl">
+            {entry.name}
+          </p>
           {entry.isGroup && entry.groupName && (
-            <span className="shrink-0 rounded-full bg-slate-900/5 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-slate-500 dark:bg-white/10 dark:text-slate-400">
+            <span className="mt-1 shrink-0 rounded-full bg-slate-900/5 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500 dark:bg-white/10 dark:text-slate-400 2xl:text-xs">
               Group
             </span>
           )}
-        </p>
+        </div>
         {entry.team && (
-          <p className="truncate text-xs text-slate-500 dark:text-slate-400 lg:text-sm">
+          <p className="mt-1 line-clamp-1 text-sm text-slate-500 dark:text-slate-400 lg:text-base 2xl:text-xl">
             {entry.team}
           </p>
         )}
@@ -535,40 +564,40 @@ function LatestResults({ groupedResults }) {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-[#141414] lg:p-7 2xl:p-9">
-      <div className="mb-3 flex shrink-0 items-center gap-2.5 lg:mb-4">
+    <div className="tv-slide flex h-full w-full flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-[#141414] lg:p-10 2xl:p-12">
+      <div className="mb-6 flex shrink-0 items-center gap-4 lg:mb-8">
         <span
-          className="h-2.5 w-2.5 rounded-full bg-[#fbbf24]"
-          style={{ boxShadow: "0 0 10px 2px #fbbf24" }}
+          className="h-4 w-4 rounded-full bg-[#fbbf24]"
+          style={{ boxShadow: "0 0 15px 3px #fbbf24" }}
         />
-        <h3 className="text-lg font-bold uppercase tracking-wide text-slate-900 dark:text-white lg:text-xl 2xl:text-2xl">
+        <h3 className="text-2xl font-bold uppercase tracking-wide text-slate-900 dark:text-white lg:text-4xl 2xl:text-5xl">
           Latest Results
         </h3>
       </div>
 
       <div
         key={pageIndex}
-        className="tv-fade grid min-h-0 flex-1 grid-rows-2 gap-4"
+        className="tv-fade grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-5 lg:gap-8 2xl:gap-10"
       >
         {page.length === 0 && (
-          <div className="row-span-2 flex items-center justify-center text-base text-slate-400 dark:text-slate-500">
+          <div className="col-span-2 row-span-2 flex items-center justify-center text-xl text-slate-400 dark:text-slate-500 2xl:text-3xl">
             No results announced yet.
           </div>
         )}
         {page.map((g) => (
           <div
             key={g.eventId}
-            className="flex flex-col justify-center rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 dark:border-white/5 dark:bg-white/[0.03] lg:px-5 lg:py-4"
+            className="flex flex-col justify-center rounded-2xl border border-slate-100 bg-slate-50 px-6 py-5 dark:border-white/5 dark:bg-white/[0.03] lg:px-8 lg:py-6 2xl:px-10 2xl:py-8"
           >
-            <p className="mb-3 truncate text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 lg:text-base">
+            <p className="mb-5 line-clamp-2 text-balance text-lg font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 lg:text-xl 2xl:text-3xl">
               {g.eventName}
               {g.categoryTag && (
-                <span className="ml-1.5 font-medium normal-case text-slate-400 dark:text-slate-500">
+                <span className="ml-2 font-medium normal-case text-slate-400 dark:text-slate-500">
                   {g.categoryTag}
                 </span>
               )}
             </p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-5 lg:gap-6 2xl:gap-8">
               <ResultRow place={1} entry={g.entries[1]} />
               <ResultRow place={2} entry={g.entries[2]} />
               <ResultRow place={3} entry={g.entries[3]} />
@@ -577,7 +606,7 @@ function LatestResults({ groupedResults }) {
         ))}
         {page.length > 0 &&
           Array.from({ length: RESULTS_PAGE_SIZE - page.length }).map(
-            (_, i) => <div key={`pad-${i}`} />,
+            (_, i) => <div key={`pad-${i}`} className="hidden lg:block" />,
           )}
       </div>
 
@@ -632,6 +661,17 @@ export default function LiveTvDashboard() {
     return groupPlacementsByEvent(normalized);
   }, [results.data]);
 
+  // Master Slide Rotation State
+  const SLIDES = ["leaderboard", "schedule", "results"];
+  const [slideIndex, setSlideIndex] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setSlideIndex((s) => (s + 1) % SLIDES.length);
+    }, MASTER_ROTATE_MS);
+    return () => clearInterval(id);
+  }, [SLIDES.length]);
+
   if (notFound) {
     return <PublicUnavailable />;
   }
@@ -641,6 +681,13 @@ export default function LiveTvDashboard() {
       <style>{`
         @keyframes tv-fade-in { from { opacity: 0; } to { opacity: 1; } }
         .tv-fade { animation: tv-fade-in 0.5s ease; }
+        
+        @keyframes tv-slide-in { 
+          0% { opacity: 0; transform: scale(0.97) translateY(15px); } 
+          100% { opacity: 1; transform: scale(1) translateY(0); } 
+        }
+        .tv-slide { animation: tv-slide-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        
         @keyframes tv-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
         .tv-pulse { animation: tv-pulse 1.6s ease-in-out infinite; }
       `}</style>
@@ -655,14 +702,27 @@ export default function LiveTvDashboard() {
 
       <DashboardHeader madrassaName={festival?.name ?? "—"} />
 
-      <div className="flex shrink-0 flex-col" style={{ flexBasis: "32%" }}>
-        <EpicLeaderboard teams={teams} />
-      </div>
+      {/* Main Slide Content Area */}
+      <main className="flex min-h-0 flex-1 px-6 pb-6 lg:px-10 lg:pb-8 2xl:px-14 2xl:pb-10">
+        {slideIndex === 0 && <EpicLeaderboard teams={teams} />}
+        {slideIndex === 1 && <HappeningNow events={events} />}
+        {slideIndex === 2 && <LatestResults groupedResults={groupedResults} />}
+      </main>
 
-      <section className="flex min-h-0 flex-1 gap-4 px-6 pb-6 lg:gap-6 lg:px-10 lg:pb-8 2xl:gap-8 2xl:px-14 2xl:pb-10">
-        <HappeningNow events={events} />
-        <LatestResults groupedResults={groupedResults} />
-      </section>
+      {/* Global Slide Progress Indicator */}
+      <div className="absolute bottom-0 left-0 flex w-full items-center justify-center gap-3 pb-4">
+        {SLIDES.map((_, i) => (
+          <div
+            key={i}
+            className="h-1.5 rounded-full transition-all duration-700"
+            style={{
+              width: i === slideIndex ? "4rem" : "1.5rem",
+              backgroundColor:
+                i === slideIndex ? "#21F1A8" : "rgba(148,163,184,0.3)",
+            }}
+          />
+        ))}
+      </div>
 
       <FullscreenToggle />
     </div>
