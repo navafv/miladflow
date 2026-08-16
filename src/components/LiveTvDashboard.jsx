@@ -5,7 +5,7 @@ import PublicUnavailable from "./PublicUnavailable.jsx";
 
 const MASTER_ROTATE_MS = 12_000;
 const INNER_ROTATE_MS = 8_000;
-
+const TEAMS_PAGE_SIZE = 3;
 const HAPPENING_PAGE_SIZE = 6;
 const RESULTS_PAGE_SIZE = 4;
 
@@ -14,7 +14,6 @@ const PLACE_COLORS = {
   2: "#38bdf8",
   3: "#fbbf24",
 };
-
 
 function isToday(isoValue) {
   if (!isoValue) return false;
@@ -26,6 +25,31 @@ function isToday(isoValue) {
     d.getMonth() === today.getMonth() &&
     d.getFullYear() === today.getFullYear()
   );
+}
+
+function useRotatingPages(items, pageSize, intervalMs = INNER_ROTATE_MS) {
+  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+  const [pageIndex, setPageIndex] = useState(0);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [items.length, pageSize]);
+
+  useEffect(() => {
+    if (pageCount <= 1) return undefined;
+    const id = setInterval(() => {
+      setPageIndex((i) => (i + 1) % pageCount);
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [pageCount, intervalMs]);
+
+  const safeIndex = pageIndex % pageCount;
+  const page = items.slice(
+    safeIndex * pageSize,
+    safeIndex * pageSize + pageSize,
+  );
+
+  return { page, pageIndex: safeIndex, pageCount };
 }
 
 function normalizeTeam(row) {
@@ -277,6 +301,36 @@ function DashboardHeader({ madrassaName }) {
   );
 }
 
+function OngoingBanner({ ongoingEvents }) {
+  if (!ongoingEvents || ongoingEvents.length === 0) return null;
+  return (
+    <div className="mb-6 flex w-full flex-col gap-3 rounded-3xl border border-[#21F1A8]/30 bg-[#21F1A8]/[0.08] p-5 shadow-[0_0_30px_-10px_rgba(33,241,168,0.2)] lg:mb-8 lg:p-6 2xl:mb-10 2xl:p-8">
+      <div className="flex items-center gap-3">
+        <span className="tv-pulse h-3 w-3 rounded-full bg-[#21F1A8] shadow-[0_0_12px_3px_#21F1A8]" />
+        <h3 className="text-sm font-bold uppercase tracking-widest text-[#0d9e73] dark:text-[#21F1A8] lg:text-base 2xl:text-lg">
+          Live Events
+        </h3>
+      </div>
+      <div className="flex flex-wrap gap-4 lg:gap-6">
+        {ongoingEvents.map((e) => (
+          <div
+            key={e.id}
+            className="flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white lg:text-xl 2xl:text-3xl"
+          >
+            <span>{e.eventName}</span>
+            <span className="font-medium text-slate-500 dark:text-slate-400">
+              {e.categoryTag}
+            </span>
+            <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-slate-600 dark:text-slate-300 lg:px-4 lg:text-base">
+              @ {e.venue}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TeamClashCard({ team, maxPoints, rank }) {
   const fillPct =
     maxPoints > 0
@@ -287,7 +341,7 @@ function TeamClashCard({ team, maxPoints, rank }) {
 
   return (
     <div
-      className="relative flex h-full w-full flex-col justify-between overflow-hidden rounded-3xl border bg-white px-6 py-8 shadow-xl dark:bg-[#141414] lg:px-10 lg:py-10 2xl:px-12 2xl:py-12"
+      className="relative flex h-full w-full flex-1 flex-col justify-between overflow-hidden rounded-3xl border bg-white px-6 py-8 shadow-xl dark:bg-[#141414] lg:px-10 lg:py-10 2xl:px-12 2xl:py-12"
       style={{
         borderColor: isLeading ? `${color}55` : undefined,
         boxShadow: isLeading ? `0 0 60px -12px ${color}66` : undefined,
@@ -362,27 +416,34 @@ function TeamClashCard({ team, maxPoints, rank }) {
   );
 }
 
-function EpicLeaderboard({ teams }) {
-  const ranked = useMemo(
-    () => [...teams].sort((a, b) => b.points - a.points),
-    [teams],
-  );
-  const maxPoints = ranked[0]?.points ?? 0;
-
-  const getWidthClass = (total) => {
-    if (total <= 3) return "w-[calc(100%/3-1rem)] flex-1 min-w-[30%]";
-    if (total === 4) return "w-[calc(50%-1rem)]";
-    return "w-[calc(100%/3-1.5rem)] min-w-[30%]";
-  };
-
+function EpicLeaderboard({
+  pagedTeams,
+  maxPoints,
+  pageIndex,
+  pageCount,
+  ongoingEvents,
+}) {
   return (
-    <section className="tv-slide flex h-full w-full flex-wrap content-center justify-center gap-4 lg:gap-6 2xl:gap-8">
-      {ranked.map((team, i) => (
-        <div key={team.id} className={`flex ${getWidthClass(teams.length)}`}>
-          <TeamClashCard team={team} maxPoints={maxPoints} rank={i} />
-        </div>
-      ))}
-    </section>
+    <div className="tv-slide flex h-full w-full flex-col">
+      <OngoingBanner ongoingEvents={ongoingEvents} />
+
+      <div className="flex min-h-0 flex-1 w-full flex-wrap content-center justify-center gap-4 lg:gap-6 2xl:gap-8">
+        {pagedTeams.map((team) => (
+          <div
+            key={team.id}
+            className="flex flex-1 w-[calc(100%/3-1.5rem)] min-w-[30%]"
+          >
+            <TeamClashCard
+              team={team}
+              maxPoints={maxPoints}
+              rank={team.actualRank}
+            />
+          </div>
+        ))}
+      </div>
+
+      <PageDots count={pageCount} activeIndex={pageIndex} color="#21F1A8" />
+    </div>
   );
 }
 
@@ -427,7 +488,7 @@ function HappeningNow({ events, pageIndex, pageCount }) {
           style={{ boxShadow: "0 0 15px 3px #21F1A8" }}
         />
         <h3 className="text-2xl font-bold uppercase tracking-wide text-slate-900 dark:text-white lg:text-4xl 2xl:text-5xl">
-          Happening Now & Upcoming
+          Today's Schedule
         </h3>
       </div>
 
@@ -497,6 +558,8 @@ function HappeningNow({ events, pageIndex, pageCount }) {
     </div>
   );
 }
+
+// --- Results Sub-components ---
 
 function medalLabel(place) {
   if (place === 1) return "1st";
@@ -635,29 +698,20 @@ export default function LiveTvDashboard() {
     slug && festivalConfirmed ? `/public/${slug}/results/?page_size=500` : null,
   );
 
-  const teams = useMemo(() => {
+  const rankedTeams = useMemo(() => {
     const rows = Array.isArray(leaderboard.data) ? leaderboard.data : [];
-    return rows.map(normalizeTeam);
+    const normalized = rows.map(normalizeTeam);
+    return normalized.sort((a, b) => b.points - a.points);
   }, [leaderboard.data]);
 
   const events = useMemo(() => {
     const items = Array.isArray(schedule.data) ? schedule.data : [];
-    return items.map(normalizeScheduleItem).filter((e) => {
-      if (
-        e.status === "ongoing" ||
-        e.status === "upcoming" ||
-        e.status === "paused"
-      )
-        return true;
-      if (
-        (e.status === "completed" || e.status === "published") &&
-        isToday(e.time)
-      )
-        return true;
-
-      return false;
-    });
+    return items.map(normalizeScheduleItem).filter((e) => isToday(e.time));
   }, [schedule.data]);
+
+  const ongoingEvents = useMemo(() => {
+    return events.filter((e) => e.status === "ongoing");
+  }, [events]);
 
   const groupedResults = useMemo(() => {
     const rows = Array.isArray(results.data)
@@ -677,6 +731,10 @@ export default function LiveTvDashboard() {
     page: 0,
   });
 
+  const leaderboardPageCount = Math.max(
+    1,
+    Math.ceil(rankedTeams.length / TEAMS_PAGE_SIZE),
+  );
   const schedulePageCount = Math.max(
     1,
     Math.ceil(events.length / HAPPENING_PAGE_SIZE),
@@ -690,6 +748,10 @@ export default function LiveTvDashboard() {
     let timeoutId;
     const { slide, page } = slideState;
 
+    if (slide === SLIDE_LEADERBOARD && page >= leaderboardPageCount) {
+      setSlideState({ slide: SLIDE_SCHEDULE, page: 0 });
+      return;
+    }
     if (slide === SLIDE_SCHEDULE && page >= schedulePageCount) {
       setSlideState({ slide: SLIDE_RESULTS, page: 0 });
       return;
@@ -701,7 +763,11 @@ export default function LiveTvDashboard() {
 
     if (slide === SLIDE_LEADERBOARD) {
       timeoutId = setTimeout(() => {
-        setSlideState({ slide: SLIDE_SCHEDULE, page: 0 });
+        if (page + 1 < leaderboardPageCount) {
+          setSlideState({ slide: SLIDE_LEADERBOARD, page: page + 1 });
+        } else {
+          setSlideState({ slide: SLIDE_SCHEDULE, page: 0 });
+        }
       }, MASTER_ROTATE_MS);
     } else if (slide === SLIDE_SCHEDULE) {
       timeoutId = setTimeout(() => {
@@ -722,11 +788,25 @@ export default function LiveTvDashboard() {
     }
 
     return () => clearTimeout(timeoutId);
-  }, [slideState, schedulePageCount, resultsPageCount]);
+  }, [slideState, leaderboardPageCount, schedulePageCount, resultsPageCount]);
 
   if (notFound) {
     return <PublicUnavailable />;
   }
+
+  const pagedTeams = useMemo(() => {
+    return rankedTeams
+      .slice(
+        slideState.page * TEAMS_PAGE_SIZE,
+        slideState.page * TEAMS_PAGE_SIZE + TEAMS_PAGE_SIZE,
+      )
+      .map((t, idx) => ({
+        ...t,
+        actualRank: slideState.page * TEAMS_PAGE_SIZE + idx,
+      }));
+  }, [rankedTeams, slideState.page]);
+
+  const maxPoints = rankedTeams[0]?.points ?? 0;
 
   return (
     <div className="fixed inset-0 flex h-[100vh] w-[100vw] flex-col overflow-hidden bg-slate-50 font-['Manrope',sans-serif] dark:bg-[#0a0a0a] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -756,7 +836,13 @@ export default function LiveTvDashboard() {
 
       <main className="flex min-h-0 flex-1 px-6 pb-6 lg:px-10 lg:pb-8 2xl:px-14 2xl:pb-10">
         {slideState.slide === SLIDE_LEADERBOARD && (
-          <EpicLeaderboard teams={teams} />
+          <EpicLeaderboard
+            pagedTeams={pagedTeams}
+            maxPoints={maxPoints}
+            pageIndex={slideState.page}
+            pageCount={leaderboardPageCount}
+            ongoingEvents={ongoingEvents}
+          />
         )}
 
         {slideState.slide === SLIDE_SCHEDULE && (
