@@ -8,7 +8,7 @@ const INNER_ROTATE_MS = 8_000; // Display time per Schedule/Results slide
 
 const TEAMS_PAGE_SIZE = 3; // 3 Teams max per slide
 const HAPPENING_PAGE_SIZE = 6; // 2 columns x 3 rows
-const RESULTS_PAGE_SIZE = 4; // 2 columns x 2 rows
+const RESULTS_PAGE_SIZE = 3; // 3 columns x 1 row (Tall majestic cards)
 
 const PLACE_COLORS = {
   1: "#21F1A8",
@@ -72,6 +72,18 @@ function genderLabel(value) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+function formatCategoryTag(categoryName, gender) {
+  if (!categoryName) return "";
+  if (
+    gender &&
+    gender.toLowerCase() !== "mixed" &&
+    gender.toLowerCase() !== "both"
+  ) {
+    return `[${categoryName} - ${genderLabel(gender)}]`;
+  }
+  return `[${categoryName}]`;
+}
+
 function normalizeScheduleItem(item) {
   return {
     id: item.id,
@@ -84,7 +96,7 @@ function normalizeScheduleItem(item) {
   };
 }
 
-// Strictly sort chronologically by time for today's schedule
+// Strictly sort chronologically by scheduled time
 function sortHappeningNow(events) {
   return [...events].sort((a, b) => {
     const timeA = a.time ? new Date(a.time).getTime() : Infinity;
@@ -129,10 +141,12 @@ function groupPlacementsByEvent(placements) {
         eventName: p.eventName,
         category: p.category,
         gender: p.gender,
-        entries: {},
+        entries: { 1: [], 2: [], 3: [] }, // Support multiple winners per place
       });
     }
-    groups.get(key).entries[p.place] = p;
+    if (p.place && groups.get(key).entries[p.place]) {
+      groups.get(key).entries[p.place].push(p);
+    }
   }
 
   return [...groups.values()].reverse();
@@ -569,19 +583,19 @@ function medalLabel(place) {
   return "3rd";
 }
 
-function ResultRow({ place, entry }) {
+function ResultPlaceGroup({ place, entries }) {
   const color = PLACE_COLORS[place] ?? "#94a3b8";
 
-  if (!entry) {
+  if (!entries || entries.length === 0) {
     return (
-      <div className="flex items-center gap-4 opacity-40">
+      <div className="flex items-center gap-4 opacity-30">
         <span
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-black lg:h-12 lg:w-12 2xl:h-16 2xl:w-16 2xl:text-xl"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-base font-black lg:h-14 lg:w-14 2xl:h-16 2xl:w-16 2xl:text-xl"
           style={{ color, backgroundColor: `${color}1a` }}
         >
           {medalLabel(place)}
         </span>
-        <p className="text-lg text-slate-400 dark:text-slate-500 2xl:text-2xl">
+        <p className="text-xl font-bold text-slate-400 dark:text-slate-500 2xl:text-2xl">
           —
         </p>
       </div>
@@ -591,31 +605,35 @@ function ResultRow({ place, entry }) {
   return (
     <div className="flex items-start gap-4">
       <span
-        className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-black lg:h-12 lg:w-12 2xl:h-16 2xl:w-16 2xl:text-xl"
+        className="mt-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-base font-black lg:h-14 lg:w-14 2xl:h-16 2xl:w-16 2xl:text-xl"
         style={{
           color,
           backgroundColor: `${color}1a`,
-          boxShadow: `0 0 12px 0 ${color}55`,
+          boxShadow: `0 0 16px 0 ${color}40`,
         }}
       >
         {medalLabel(place)}
       </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start gap-2">
-          <p className="line-clamp-2 text-balance text-xl font-bold leading-snug text-slate-900 dark:text-white lg:text-2xl 2xl:text-3xl">
-            {entry.name}
-          </p>
-          {entry.isGroup && entry.groupName && (
-            <span className="mt-1 shrink-0 rounded-full bg-slate-900/5 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500 dark:bg-white/10 dark:text-slate-400 2xl:text-xs">
-              Group
-            </span>
-          )}
-        </div>
-        {entry.team && (
-          <p className="mt-1 line-clamp-1 text-sm text-slate-500 dark:text-slate-400 lg:text-base 2xl:text-xl">
-            {entry.team}
-          </p>
-        )}
+      <div className="min-w-0 flex-1 flex flex-col gap-4">
+        {entries.map((entry, idx) => (
+          <div key={entry.id || idx} className="flex flex-col">
+            <div className="flex items-start gap-3">
+              <p className="line-clamp-2 text-balance text-2xl font-extrabold leading-snug text-slate-900 dark:text-white lg:text-3xl 2xl:text-4xl">
+                {entry.name}
+              </p>
+              {entry.isGroup && entry.groupName && (
+                <span className="mt-1.5 shrink-0 rounded-md bg-slate-900/5 px-2.5 py-1 text-xs font-black uppercase tracking-widest text-slate-500 dark:bg-white/10 dark:text-slate-400 2xl:text-sm">
+                  Group
+                </span>
+              )}
+            </div>
+            {entry.team && (
+              <p className="mt-1 line-clamp-1 text-lg font-bold text-slate-500 dark:text-slate-400 lg:text-xl 2xl:text-2xl">
+                {entry.team}
+              </p>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -641,42 +659,45 @@ function LatestResults({ groupedResults, pageIndex, pageCount }) {
 
       <div
         key={pageIndex}
-        className="tv-fade grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-5 lg:gap-8 2xl:gap-10"
+        className="tv-fade grid min-h-0 flex-1 grid-cols-3 grid-rows-1 gap-5 lg:gap-8 2xl:gap-10"
       >
         {page.length === 0 && (
-          <div className="col-span-2 row-span-2 flex items-center justify-center text-xl text-slate-400 dark:text-slate-500 2xl:text-3xl">
+          <div className="col-span-3 flex items-center justify-center text-xl text-slate-400 dark:text-slate-500 2xl:text-3xl">
             No results announced yet.
           </div>
         )}
+
         {page.map((g) => (
           <div
             key={g.eventId}
             className="flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#1a1a1a]"
           >
-            {/* Event Header - Now visually distinct to highlight Event details */}
-            <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50/80 px-6 py-4 dark:border-white/5 dark:bg-white/[0.02] lg:px-8 lg:py-5 2xl:px-10 2xl:py-6">
-              <h4 className="line-clamp-1 text-balance text-xl font-extrabold text-slate-900 dark:text-white lg:text-2xl 2xl:text-3xl">
+            {/* Dedicated Event Header Container */}
+            <div className="flex flex-col items-center text-center gap-3 border-b border-slate-200 bg-gradient-to-br from-slate-50 to-white px-6 py-6 dark:border-white/5 dark:from-[#111] dark:to-[#1a1a1a]">
+              <h4 className="line-clamp-2 text-balance text-2xl font-black uppercase tracking-tight text-slate-900 dark:text-white lg:text-3xl 2xl:text-4xl">
                 {g.eventName}
               </h4>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center justify-center gap-2">
                 {g.category && (
-                  <span className="rounded-md bg-[#21F1A8]/15 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-[#0d9e73] dark:bg-[#21F1A8]/10 dark:text-[#21F1A8] 2xl:text-sm">
+                  <span className="rounded-lg bg-[#21F1A8]/20 px-3 py-1 text-sm font-bold uppercase tracking-wider text-[#0d9e73] dark:bg-[#21F1A8]/10 dark:text-[#21F1A8] 2xl:text-base">
                     {g.category}
                   </span>
                 )}
-                {g.gender && g.gender !== "Mixed" && (
-                  <span className="rounded-md bg-slate-200/70 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-slate-600 dark:bg-white/10 dark:text-slate-300 2xl:text-sm">
-                    {genderLabel(g.gender)}
-                  </span>
-                )}
+                {g.gender &&
+                  g.gender.toLowerCase() !== "mixed" &&
+                  g.gender.toLowerCase() !== "both" && (
+                    <span className="rounded-lg bg-slate-200 px-3 py-1 text-sm font-bold uppercase tracking-wider text-slate-700 dark:bg-white/10 dark:text-slate-300 2xl:text-base">
+                      {genderLabel(g.gender)}
+                    </span>
+                  )}
               </div>
             </div>
 
-            {/* Winners Body */}
-            <div className="flex flex-1 flex-col justify-center gap-4 px-6 py-5 lg:gap-5 lg:px-8 lg:py-6 2xl:gap-6 2xl:px-10 2xl:py-8">
-              <ResultRow place={1} entry={g.entries[1]} />
-              <ResultRow place={2} entry={g.entries[2]} />
-              <ResultRow place={3} entry={g.entries[3]} />
+            {/* Scrollable Winners Body */}
+            <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-6 py-6 [scrollbar-width:none] lg:gap-8 lg:px-8 lg:py-8 2xl:gap-10 2xl:px-10 2xl:py-10 [&::-webkit-scrollbar]:hidden">
+              <ResultPlaceGroup place={1} entries={g.entries[1]} />
+              <ResultPlaceGroup place={2} entries={g.entries[2]} />
+              <ResultPlaceGroup place={3} entries={g.entries[3]} />
             </div>
           </div>
         ))}
