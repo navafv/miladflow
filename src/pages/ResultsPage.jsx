@@ -357,6 +357,8 @@ function normalizeTeamRow(row) {
     id: row.team_id ?? row.id,
     name: row.team_name ?? row.name,
     totalPoints: row.total_points ?? 0,
+    boysPoints: row.boys_points ?? 0,
+    girlsPoints: row.girls_points ?? 0,
   };
 }
 
@@ -461,6 +463,7 @@ function TeamStandings({ slug }) {
           key={row.id}
           rank={i + 1}
           title={row.name}
+          subtitle={`Boys: ${row.boysPoints} pts · Girls: ${row.girlsPoints} pts`}
           points={row.totalPoints}
           index={i}
         />
@@ -472,8 +475,12 @@ function TeamStandings({ slug }) {
 function StudentStandings({ slug }) {
   const { categories } = useResultFilterOptions(slug);
   const [category, setCategory] = useState(CATEGORY_ALL);
+  const [gender, setGender] = useState("all");
+
   const params = new URLSearchParams();
   if (category !== CATEGORY_ALL) params.set("category", category);
+  if (gender !== "all") params.set("gender", gender);
+
   const query = params.toString();
   const { data, loading, error } = usePublicResource(
     `/public/${slug}/leaderboard/students/${query ? `?${query}` : ""}`,
@@ -485,21 +492,35 @@ function StudentStandings({ slug }) {
 
   return (
     <div className="space-y-3">
-      <label className="flex flex-col gap-1 px-1 text-xs font-semibold text-neutral-500 dark:text-neutral-400 sm:w-64">
-        Category
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className={`rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-[#171717] transition-all duration-200 dark:border-white/10 dark:bg-[#171717] dark:text-white ${focusRing}`}
-        >
-          <option value={CATEGORY_ALL}>All Categories</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <label className="flex flex-col gap-1 px-1 text-xs font-semibold text-neutral-500 dark:text-neutral-400 sm:w-64">
+          Category
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className={`rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-[#171717] transition-all duration-200 dark:border-white/10 dark:bg-[#171717] dark:text-white ${focusRing}`}
+          >
+            <option value={CATEGORY_ALL}>All Categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 px-1 text-xs font-semibold text-neutral-500 dark:text-neutral-400 sm:w-48">
+          Gender
+          <select
+            value={gender}
+            onChange={(e) => setGender(e.target.value)}
+            className={`rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-[#171717] transition-all duration-200 dark:border-white/10 dark:bg-[#171717] dark:text-white ${focusRing}`}
+          >
+            <option value="all">All Students</option>
+            <option value="boys">Boys</option>
+            <option value="girls">Girls</option>
+          </select>
+        </label>
+      </div>
       <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#262626] dark:shadow-none">
         <StandingsList
           loading={loading}
