@@ -3,17 +3,20 @@ import { useParams } from "react-router-dom";
 import { usePublicPoll } from "../lib/usePublicResource.js";
 import PublicUnavailable from "./PublicUnavailable.jsx";
 
-const MASTER_ROTATE_MS = 12_000;
-const INNER_ROTATE_MS = 8_000;
-const TEAMS_PAGE_SIZE = 3;
-const HAPPENING_PAGE_SIZE = 6;
-const RESULTS_PAGE_SIZE = 4;
+const MASTER_ROTATE_MS = 12_000; // Display time per Leaderboard slide
+const INNER_ROTATE_MS = 8_000; // Display time per Schedule/Results slide
+
+const TEAMS_PAGE_SIZE = 3; // 3 Teams max per slide
+const HAPPENING_PAGE_SIZE = 6; // 2 columns x 3 rows
+const RESULTS_PAGE_SIZE = 4; // 2 columns x 2 rows
 
 const PLACE_COLORS = {
   1: "#21F1A8",
   2: "#38bdf8",
   3: "#fbbf24",
 };
+
+// --- Utilities ---
 
 function isToday(isoValue) {
   if (!isoValue) return false;
@@ -64,43 +67,29 @@ function normalizeTeam(row) {
 
 function genderLabel(value) {
   if (!value) return "";
-  if (value === "mixed") return "Mixed";
+  if (value.toLowerCase() === "mixed" || value.toLowerCase() === "both")
+    return "Mixed";
   return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function formatCategoryTag(categoryName, gender) {
-  if (!categoryName) return "";
-  if (gender && gender !== "mixed") {
-    return `[${categoryName} - ${genderLabel(gender)}]`;
-  }
-  return `[${categoryName}]`;
 }
 
 function normalizeScheduleItem(item) {
   return {
     id: item.id,
     eventName: item.title ?? item.event_name ?? "Event",
-    categoryTag: formatCategoryTag(item.category_name, item.gender),
+    category: item.category_name,
+    gender: item.gender,
     venue: item.venue_name ?? "—",
     time: item.scheduled_time ?? null,
     status: item.status ?? "upcoming",
   };
 }
 
-const STATUS_SORT_RANK = {
-  ongoing: 0,
-  paused: 1,
-  upcoming: 2,
-  completed: 3,
-  published: 3,
-};
-
+// Strictly sort chronologically by time for today's schedule
 function sortHappeningNow(events) {
   return [...events].sort((a, b) => {
-    const rankDiff =
-      (STATUS_SORT_RANK[a.status] ?? 4) - (STATUS_SORT_RANK[b.status] ?? 4);
-    if (rankDiff !== 0) return rankDiff;
-    return (a.time ?? "").localeCompare(b.time ?? "");
+    const timeA = a.time ? new Date(a.time).getTime() : Infinity;
+    const timeB = b.time ? new Date(b.time).getTime() : Infinity;
+    return timeA - timeB;
   });
 }
 
@@ -109,7 +98,8 @@ function normalizePlacement(p) {
     id: p.id,
     eventId: p.event_id,
     eventName: p.event_name ?? "Event",
-    categoryTag: formatCategoryTag(p.category_name, p.gender),
+    category: p.category_name ?? p.category,
+    gender: p.gender,
     place: p.place,
     isGroup: p.is_group ?? false,
     groupName: p.group_name ?? null,
@@ -137,7 +127,8 @@ function groupPlacementsByEvent(placements) {
       groups.set(key, {
         eventId: key,
         eventName: p.eventName,
-        categoryTag: p.categoryTag,
+        category: p.category,
+        gender: p.gender,
         entries: {},
       });
     }
@@ -146,6 +137,8 @@ function groupPlacementsByEvent(placements) {
 
   return [...groups.values()].reverse();
 }
+
+// --- Components ---
 
 function useClock() {
   const [now, setNow] = useState(() => new Date());
@@ -301,6 +294,8 @@ function DashboardHeader({ madrassaName }) {
   );
 }
 
+// --- Team Leaderboard Sub-components ---
+
 function OngoingBanner({ ongoingEvents }) {
   if (!ongoingEvents || ongoingEvents.length === 0) return null;
   return (
@@ -318,10 +313,12 @@ function OngoingBanner({ ongoingEvents }) {
             className="flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white lg:text-xl 2xl:text-3xl"
           >
             <span>{e.eventName}</span>
-            <span className="font-medium text-slate-500 dark:text-slate-400">
-              {e.categoryTag}
-            </span>
-            <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-slate-600 dark:text-slate-300 lg:px-4 lg:text-base">
+            {e.category && (
+              <span className="font-medium text-slate-500 dark:text-slate-400">
+                [{e.category}]
+              </span>
+            )}
+            <span className="rounded-full bg-slate-900/5 px-3 py-1 text-sm text-slate-600 dark:bg-white/10 dark:text-slate-300 lg:px-4 lg:text-base">
               @ {e.venue}
             </span>
           </div>
@@ -447,6 +444,8 @@ function EpicLeaderboard({
   );
 }
 
+// --- Schedule Sub-components ---
+
 function StatusBadge({ status }) {
   if (status === "ongoing") {
     return (
@@ -535,11 +534,14 @@ function HappeningNow({ events, pageIndex, pageCount }) {
                   <p className="line-clamp-1 text-lg text-slate-500 dark:text-slate-400 lg:text-xl 2xl:text-2xl">
                     {e.venue}
                   </p>
-                  {e.categoryTag && (
+                  {e.category && (
                     <>
                       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300 dark:bg-slate-700" />
                       <span className="line-clamp-1 text-lg font-medium text-slate-500 dark:text-slate-400 lg:text-xl 2xl:text-2xl">
-                        {e.categoryTag}
+                        {e.category}{" "}
+                        {e.gender && e.gender !== "Mixed"
+                          ? `- ${genderLabel(e.gender)}`
+                          : ""}
                       </span>
                     </>
                   )}
@@ -649,17 +651,29 @@ function LatestResults({ groupedResults, pageIndex, pageCount }) {
         {page.map((g) => (
           <div
             key={g.eventId}
-            className="flex flex-col justify-center rounded-2xl border border-slate-100 bg-slate-50 px-6 py-5 dark:border-white/5 dark:bg-white/[0.03] lg:px-8 lg:py-6 2xl:px-10 2xl:py-8"
+            className="flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#1a1a1a]"
           >
-            <p className="mb-5 line-clamp-2 text-balance text-lg font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 lg:text-xl 2xl:text-3xl">
-              {g.eventName}
-              {g.categoryTag && (
-                <span className="ml-2 font-medium normal-case text-slate-400 dark:text-slate-500">
-                  {g.categoryTag}
-                </span>
-              )}
-            </p>
-            <div className="grid grid-cols-1 gap-5 lg:gap-6 2xl:gap-8">
+            {/* Event Header - Now visually distinct to highlight Event details */}
+            <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50/80 px-6 py-4 dark:border-white/5 dark:bg-white/[0.02] lg:px-8 lg:py-5 2xl:px-10 2xl:py-6">
+              <h4 className="line-clamp-1 text-balance text-xl font-extrabold text-slate-900 dark:text-white lg:text-2xl 2xl:text-3xl">
+                {g.eventName}
+              </h4>
+              <div className="flex flex-wrap items-center gap-2">
+                {g.category && (
+                  <span className="rounded-md bg-[#21F1A8]/15 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-[#0d9e73] dark:bg-[#21F1A8]/10 dark:text-[#21F1A8] 2xl:text-sm">
+                    {g.category}
+                  </span>
+                )}
+                {g.gender && g.gender !== "Mixed" && (
+                  <span className="rounded-md bg-slate-200/70 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-slate-600 dark:bg-white/10 dark:text-slate-300 2xl:text-sm">
+                    {genderLabel(g.gender)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Winners Body */}
+            <div className="flex flex-1 flex-col justify-center gap-4 px-6 py-5 lg:gap-5 lg:px-8 lg:py-6 2xl:gap-6 2xl:px-10 2xl:py-8">
               <ResultRow place={1} entry={g.entries[1]} />
               <ResultRow place={2} entry={g.entries[2]} />
               <ResultRow place={3} entry={g.entries[3]} />
@@ -676,6 +690,8 @@ function LatestResults({ groupedResults, pageIndex, pageCount }) {
     </div>
   );
 }
+
+// --- Main Component ---
 
 export default function LiveTvDashboard() {
   const { slug } = useParams();
@@ -694,6 +710,7 @@ export default function LiveTvDashboard() {
   const schedule = usePublicPoll(
     slug && festivalConfirmed ? `/public/${slug}/schedule/` : null,
   );
+  // Requested 500 to ensure ALL results are safely captured for the slide pagination loop
   const results = usePublicPoll(
     slug && festivalConfirmed ? `/public/${slug}/results/?page_size=500` : null,
   );
@@ -706,7 +723,7 @@ export default function LiveTvDashboard() {
 
   const events = useMemo(() => {
     const items = Array.isArray(schedule.data) ? schedule.data : [];
-    return items.map(normalizeScheduleItem).filter((e) => isToday(e.time));
+    return items.map(normalizeScheduleItem).filter((e) => isToday(e.time)); // Restrict strictly to TODAY's events
   }, [schedule.data]);
 
   const ongoingEvents = useMemo(() => {
@@ -721,6 +738,7 @@ export default function LiveTvDashboard() {
     return groupPlacementsByEvent(normalized);
   }, [results.data]);
 
+  // --- Centralized Slide State Machine ---
   const SLIDE_LEADERBOARD = 0;
   const SLIDE_SCHEDULE = 1;
   const SLIDE_RESULTS = 2;
@@ -748,6 +766,7 @@ export default function LiveTvDashboard() {
     let timeoutId;
     const { slide, page } = slideState;
 
+    // Fallback bounds check if data vanishes dynamically
     if (slide === SLIDE_LEADERBOARD && page >= leaderboardPageCount) {
       setSlideState({ slide: SLIDE_SCHEDULE, page: 0 });
       return;
@@ -794,6 +813,7 @@ export default function LiveTvDashboard() {
     return <PublicUnavailable />;
   }
 
+  // Calculate the paginated chunk of teams to show on the current Leaderboard slide
   const pagedTeams = useMemo(() => {
     return rankedTeams
       .slice(
@@ -834,6 +854,7 @@ export default function LiveTvDashboard() {
 
       <DashboardHeader madrassaName={festival?.name ?? "—"} />
 
+      {/* Main Slide Content Area */}
       <main className="flex min-h-0 flex-1 px-6 pb-6 lg:px-10 lg:pb-8 2xl:px-14 2xl:pb-10">
         {slideState.slide === SLIDE_LEADERBOARD && (
           <EpicLeaderboard
@@ -862,6 +883,7 @@ export default function LiveTvDashboard() {
         )}
       </main>
 
+      {/* Global Slide Progress Indicator */}
       <div className="absolute bottom-0 left-0 flex w-full items-center justify-center gap-3 pb-4">
         {SLIDES.map((_, i) => (
           <div
