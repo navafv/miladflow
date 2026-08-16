@@ -3,11 +3,11 @@ import { useParams } from "react-router-dom";
 import { usePublicPoll } from "../lib/usePublicResource.js";
 import PublicUnavailable from "./PublicUnavailable.jsx";
 
-const MASTER_ROTATE_MS = 15_000;
-const INNER_ROTATE_MS = 7_000;
+const MASTER_ROTATE_MS = 12_000;
+const INNER_ROTATE_MS = 8_000;
 
-const HAPPENING_PAGE_SIZE = 6; // 2 columns x 3 rows
-const RESULTS_PAGE_SIZE = 4; // 2 columns x 2 rows
+const HAPPENING_PAGE_SIZE = 6;
+const RESULTS_PAGE_SIZE = 4;
 
 const PLACE_COLORS = {
   1: "#21F1A8",
@@ -15,29 +15,17 @@ const PLACE_COLORS = {
   3: "#fbbf24",
 };
 
-function useRotatingPages(items, pageSize, intervalMs = INNER_ROTATE_MS) {
-  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
-  const [pageIndex, setPageIndex] = useState(0);
 
-  useEffect(() => {
-    setPageIndex(0);
-  }, [items.length, pageSize]);
-
-  useEffect(() => {
-    if (pageCount <= 1) return undefined;
-    const id = setInterval(() => {
-      setPageIndex((i) => (i + 1) % pageCount);
-    }, intervalMs);
-    return () => clearInterval(id);
-  }, [pageCount, intervalMs]);
-
-  const safeIndex = pageIndex % pageCount;
-  const page = items.slice(
-    safeIndex * pageSize,
-    safeIndex * pageSize + pageSize,
+function isToday(isoValue) {
+  if (!isoValue) return false;
+  const d = new Date(isoValue);
+  if (Number.isNaN(d.getTime())) return false;
+  const today = new Date();
+  return (
+    d.getDate() === today.getDate() &&
+    d.getMonth() === today.getMonth() &&
+    d.getFullYear() === today.getFullYear()
   );
-
-  return { page, pageIndex: safeIndex, pageCount };
 }
 
 function normalizeTeam(row) {
@@ -75,12 +63,18 @@ function normalizeScheduleItem(item) {
   };
 }
 
-const STATUS_SORT_RANK = { ongoing: 0, paused: 1, upcoming: 2 };
+const STATUS_SORT_RANK = {
+  ongoing: 0,
+  paused: 1,
+  upcoming: 2,
+  completed: 3,
+  published: 3,
+};
 
 function sortHappeningNow(events) {
   return [...events].sort((a, b) => {
     const rankDiff =
-      (STATUS_SORT_RANK[a.status] ?? 3) - (STATUS_SORT_RANK[b.status] ?? 3);
+      (STATUS_SORT_RANK[a.status] ?? 4) - (STATUS_SORT_RANK[b.status] ?? 4);
     if (rankDiff !== 0) return rankDiff;
     return (a.time ?? "").localeCompare(b.time ?? "");
   });
@@ -342,7 +336,6 @@ function TeamClashCard({ team, maxPoints, rank }) {
           </span>
         </div>
 
-        {/* Boys & Girls Breakdown */}
         <div className="relative z-10 mt-3 flex items-center justify-center gap-4 text-sm font-bold text-slate-500 dark:text-slate-400 lg:text-base 2xl:text-xl">
           <span className="flex items-center gap-2">
             <div className="h-2.5 w-2.5 rounded-full bg-[#38bdf8]" />
@@ -376,11 +369,10 @@ function EpicLeaderboard({ teams }) {
   );
   const maxPoints = ranked[0]?.points ?? 0;
 
-  // Smart flex layout logic based on total teams
   const getWidthClass = (total) => {
     if (total <= 3) return "w-[calc(100%/3-1rem)] flex-1 min-w-[30%]";
     if (total === 4) return "w-[calc(50%-1rem)]";
-    return "w-[calc(100%/3-1.5rem)] min-w-[30%]"; // For 5 teams: 3 top, 2 bottom centered
+    return "w-[calc(100%/3-1.5rem)] min-w-[30%]";
   };
 
   return (
@@ -410,14 +402,21 @@ function StatusBadge({ status }) {
       </span>
     );
   }
+  if (status === "completed" || status === "published") {
+    return (
+      <span className="ml-3 shrink-0 rounded-full bg-slate-200 px-4 py-1.5 text-xs font-black uppercase tracking-wide text-slate-600 dark:bg-white/10 dark:text-slate-300 lg:text-sm 2xl:text-base">
+        Completed
+      </span>
+    );
+  }
   return null;
 }
 
-function HappeningNow({ events }) {
+function HappeningNow({ events, pageIndex, pageCount }) {
   const ordered = useMemo(() => sortHappeningNow(events), [events]);
-  const { page, pageIndex, pageCount } = useRotatingPages(
-    ordered,
-    HAPPENING_PAGE_SIZE,
+  const page = ordered.slice(
+    pageIndex * HAPPENING_PAGE_SIZE,
+    pageIndex * HAPPENING_PAGE_SIZE + HAPPENING_PAGE_SIZE,
   );
 
   return (
@@ -438,7 +437,7 @@ function HappeningNow({ events }) {
       >
         {page.length === 0 && (
           <div className="col-span-2 row-span-3 flex items-center justify-center text-xl text-slate-400 dark:text-slate-500 2xl:text-3xl">
-            Nothing scheduled right now.
+            Nothing scheduled for today.
           </div>
         )}
         {page.map((e) => {
@@ -557,10 +556,10 @@ function ResultRow({ place, entry }) {
   );
 }
 
-function LatestResults({ groupedResults }) {
-  const { page, pageIndex, pageCount } = useRotatingPages(
-    groupedResults,
-    RESULTS_PAGE_SIZE,
+function LatestResults({ groupedResults, pageIndex, pageCount }) {
+  const page = groupedResults.slice(
+    pageIndex * RESULTS_PAGE_SIZE,
+    pageIndex * RESULTS_PAGE_SIZE + RESULTS_PAGE_SIZE,
   );
 
   return (
@@ -633,7 +632,7 @@ export default function LiveTvDashboard() {
     slug && festivalConfirmed ? `/public/${slug}/schedule/` : null,
   );
   const results = usePublicPoll(
-    slug && festivalConfirmed ? `/public/${slug}/results/?page_size=100` : null,
+    slug && festivalConfirmed ? `/public/${slug}/results/?page_size=500` : null,
   );
 
   const teams = useMemo(() => {
@@ -643,14 +642,21 @@ export default function LiveTvDashboard() {
 
   const events = useMemo(() => {
     const items = Array.isArray(schedule.data) ? schedule.data : [];
-    return items
-      .map(normalizeScheduleItem)
-      .filter(
-        (e) =>
-          e.status === "ongoing" ||
-          e.status === "upcoming" ||
-          e.status === "paused",
-      );
+    return items.map(normalizeScheduleItem).filter((e) => {
+      if (
+        e.status === "ongoing" ||
+        e.status === "upcoming" ||
+        e.status === "paused"
+      )
+        return true;
+      if (
+        (e.status === "completed" || e.status === "published") &&
+        isToday(e.time)
+      )
+        return true;
+
+      return false;
+    });
   }, [schedule.data]);
 
   const groupedResults = useMemo(() => {
@@ -661,16 +667,62 @@ export default function LiveTvDashboard() {
     return groupPlacementsByEvent(normalized);
   }, [results.data]);
 
-  // Master Slide Rotation State
-  const SLIDES = ["leaderboard", "schedule", "results"];
-  const [slideIndex, setSlideIndex] = useState(0);
+  const SLIDE_LEADERBOARD = 0;
+  const SLIDE_SCHEDULE = 1;
+  const SLIDE_RESULTS = 2;
+  const SLIDES = [SLIDE_LEADERBOARD, SLIDE_SCHEDULE, SLIDE_RESULTS];
+
+  const [slideState, setSlideState] = useState({
+    slide: SLIDE_LEADERBOARD,
+    page: 0,
+  });
+
+  const schedulePageCount = Math.max(
+    1,
+    Math.ceil(events.length / HAPPENING_PAGE_SIZE),
+  );
+  const resultsPageCount = Math.max(
+    1,
+    Math.ceil(groupedResults.length / RESULTS_PAGE_SIZE),
+  );
 
   useEffect(() => {
-    const id = setInterval(() => {
-      setSlideIndex((s) => (s + 1) % SLIDES.length);
-    }, MASTER_ROTATE_MS);
-    return () => clearInterval(id);
-  }, [SLIDES.length]);
+    let timeoutId;
+    const { slide, page } = slideState;
+
+    if (slide === SLIDE_SCHEDULE && page >= schedulePageCount) {
+      setSlideState({ slide: SLIDE_RESULTS, page: 0 });
+      return;
+    }
+    if (slide === SLIDE_RESULTS && page >= resultsPageCount) {
+      setSlideState({ slide: SLIDE_LEADERBOARD, page: 0 });
+      return;
+    }
+
+    if (slide === SLIDE_LEADERBOARD) {
+      timeoutId = setTimeout(() => {
+        setSlideState({ slide: SLIDE_SCHEDULE, page: 0 });
+      }, MASTER_ROTATE_MS);
+    } else if (slide === SLIDE_SCHEDULE) {
+      timeoutId = setTimeout(() => {
+        if (page + 1 < schedulePageCount) {
+          setSlideState({ slide: SLIDE_SCHEDULE, page: page + 1 });
+        } else {
+          setSlideState({ slide: SLIDE_RESULTS, page: 0 });
+        }
+      }, INNER_ROTATE_MS);
+    } else if (slide === SLIDE_RESULTS) {
+      timeoutId = setTimeout(() => {
+        if (page + 1 < resultsPageCount) {
+          setSlideState({ slide: SLIDE_RESULTS, page: page + 1 });
+        } else {
+          setSlideState({ slide: SLIDE_LEADERBOARD, page: 0 });
+        }
+      }, INNER_ROTATE_MS);
+    }
+
+    return () => clearTimeout(timeoutId);
+  }, [slideState, schedulePageCount, resultsPageCount]);
 
   if (notFound) {
     return <PublicUnavailable />;
@@ -702,23 +754,37 @@ export default function LiveTvDashboard() {
 
       <DashboardHeader madrassaName={festival?.name ?? "—"} />
 
-      {/* Main Slide Content Area */}
       <main className="flex min-h-0 flex-1 px-6 pb-6 lg:px-10 lg:pb-8 2xl:px-14 2xl:pb-10">
-        {slideIndex === 0 && <EpicLeaderboard teams={teams} />}
-        {slideIndex === 1 && <HappeningNow events={events} />}
-        {slideIndex === 2 && <LatestResults groupedResults={groupedResults} />}
+        {slideState.slide === SLIDE_LEADERBOARD && (
+          <EpicLeaderboard teams={teams} />
+        )}
+
+        {slideState.slide === SLIDE_SCHEDULE && (
+          <HappeningNow
+            events={events}
+            pageIndex={slideState.page}
+            pageCount={schedulePageCount}
+          />
+        )}
+
+        {slideState.slide === SLIDE_RESULTS && (
+          <LatestResults
+            groupedResults={groupedResults}
+            pageIndex={slideState.page}
+            pageCount={resultsPageCount}
+          />
+        )}
       </main>
 
-      {/* Global Slide Progress Indicator */}
       <div className="absolute bottom-0 left-0 flex w-full items-center justify-center gap-3 pb-4">
         {SLIDES.map((_, i) => (
           <div
             key={i}
             className="h-1.5 rounded-full transition-all duration-700"
             style={{
-              width: i === slideIndex ? "4rem" : "1.5rem",
+              width: i === slideState.slide ? "4rem" : "1.5rem",
               backgroundColor:
-                i === slideIndex ? "#21F1A8" : "rgba(148,163,184,0.3)",
+                i === slideState.slide ? "#21F1A8" : "rgba(148,163,184,0.3)",
             }}
           />
         ))}
