@@ -44,7 +44,7 @@ function yieldToMainThread() {
 export async function generateJudgeSheetsPDF(
   registrationsByEvent,
   judgeCount,
-  { orgName, filename = "Judge-Sheets" } = {},
+  { orgName, filename = "Judge-Sheets", continuousPrint = true } = {},
 ) {
   const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
   await registerMalayalamPdfFont(doc);
@@ -71,6 +71,7 @@ export async function generateJudgeSheetsPDF(
 
   let slot = 0;
   let needsNewPage = false;
+  let lastEvent = null;
   const gridPageNumbers = new Set();
 
   const placeSlot = () => {
@@ -94,6 +95,19 @@ export async function generateJudgeSheetsPDF(
 
   for (let i = 0; i < sheets.length; i += 1) {
     const ev = sheets[i];
+
+    // "Continuous Print" (paper-saving) mode packs sheets back-to-back in
+    // the 3-per-page grid with no regard for category/gender/event
+    // boundaries (the default). With it off, force a fresh page whenever
+    // we move to a new category, gender, or event, matching the standard
+    // "one new page per group" print behavior.
+    if (!continuousPrint && lastEvent && lastEvent !== ev && slot !== 0) {
+      doc.addPage();
+      slot = 0;
+      needsNewPage = false;
+    }
+    lastEvent = ev;
+
     const detailMaxWidth = columnWidth * 0.32 - CELL_PADDING * 2;
     const headerHeight = measureHeaderHeight(doc, ev, columnWidth, orgName);
     const eventRows = buildEventRows(doc, ev, detailMaxWidth);

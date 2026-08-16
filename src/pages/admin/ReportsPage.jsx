@@ -10,6 +10,7 @@ import {
   buildExportTableNode,
   exportTableToPdf,
   exportGroupedResultsToPdf,
+  exportMultiTablePdf,
 } from "../../components/admin/ExportButtons.jsx";
 import { buildExportFilename } from "../../lib/exportFilename.js";
 import { ensureMalayalamFontFace } from "../../lib/pdfFonts.js";
@@ -97,6 +98,35 @@ function ReportCard({ icon, title, description, children }) {
 function CardDivider() {
   return (
     <div className="my-4 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent dark:via-slate-700" />
+  );
+}
+
+function ToggleField({ label, hint, checked, onChange }) {
+  return (
+    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white/70 px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-[#171717]/50">
+      <span>
+        <span className="font-medium text-slate-700 dark:text-slate-200">
+          {label}
+        </span>
+        {hint && (
+          <span className="block text-[10px] font-medium text-slate-400 dark:text-slate-500">
+            {hint}
+          </span>
+        )}
+      </span>
+      <span
+        onClick={() => onChange(!checked)}
+        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+          checked ? "bg-[#21F1A8]" : "bg-slate-200 dark:bg-slate-700"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${
+            checked ? "left-5" : "left-0.5"
+          }`}
+        />
+      </span>
+    </label>
   );
 }
 
@@ -208,10 +238,44 @@ const ICONS = {
   ),
 };
 
+function buildMatrixTable(result) {
+  const events = result?.events ?? [];
+  const students = result?.students ?? [];
+  const registeredPairs = new Set(
+    (result?.registered_pairs ?? []).map(
+      ([studentId, eventId]) => `${studentId}:${eventId}`,
+    ),
+  );
+
+  const columns = [
+    { key: "studentName", label: "Student Name" },
+    { key: "regNo", label: "Reg. No." },
+    { key: "team", label: "Team" },
+    ...events.map((ev) => ({
+      key: `event_${ev.id}`,
+      label: ev.name,
+      vertical: true,
+    })),
+  ];
+  const rows = students
+    .filter((s) => events.some((ev) => registeredPairs.has(`${s.id}:${ev.id}`)))
+    .map((s) => {
+      const row = { studentName: s.name, regNo: s.reg_no, team: s.team_name };
+      events.forEach((ev) => {
+        row[`event_${ev.id}`] = registeredPairs.has(`${s.id}:${ev.id}`)
+          ? "✓"
+          : "—";
+      });
+      return row;
+    });
+  return { columns, rows };
+}
+
 function RegistrationMatrixCard({ categories, teams, orgName, showToast }) {
   const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [genderFilter, setGenderFilter] = useState(ALL);
   const [teamFilter, setTeamFilter] = useState(ALL);
+  const [continuousPrint, setContinuousPrint] = useState(false);
   const [loadingKind, setLoadingKind] = useState(null);
   const [error, setError] = useState(null);
 
@@ -254,7 +318,11 @@ function RegistrationMatrixCard({ categories, teams, orgName, showToast }) {
       { key: "studentName", label: "Student Name" },
       { key: "regNo", label: "Reg. No." },
       { key: "team", label: "Team" },
-      ...events.map((ev) => ({ key: `event_${ev.id}`, label: ev.name })),
+      ...events.map((ev) => ({
+        key: `event_${ev.id}`,
+        label: ev.name,
+        vertical: true,
+      })),
     ];
     const rows = students.map((s) => {
       const row = { studentName: s.name, regNo: s.reg_no, team: s.team_name };
@@ -328,6 +396,83 @@ function RegistrationMatrixCard({ categories, teams, orgName, showToast }) {
     }
   };
 
+  const handleExportAll = async (kind) => {
+    setError(null);
+    const loadingTag = kind === "excel" ? "allExcel" : "allPdf";
+    setLoadingKind(loadingTag);
+    try {
+      const groups = [];
+      for (const cat of categories) {
+        for (const g of GENDER_OPTIONS) {
+          const params = new URLSearchParams({
+            category: String(cat.id),
+            gender: g.value,
+          });
+          if (teamFilter !== ALL) params.set("team", teamFilter);
+          const result = await apiClient.get(
+            `/registrations/matrix/?${params.toString()}`,
+          );
+          const { columns, rows } = buildMatrixTable(result);
+          if (rows.length === 0) continue;
+          groups.push({ heading: `${cat.name} — ${g.label}`, columns, rows });
+        }
+      }
+
+      if (groups.length === 0) {
+        setError("No registrations found across any category/gender.");
+        return;
+      }
+
+      if (kind === "excel") {
+        const workbook = XLSX.utils.book_new();
+        groups.forEach((group, idx) => {
+          const data = group.rows.map((row) =>
+            Object.fromEntries(group.columns.map((c) => [c.label, row[c.key]])),
+          );
+          const sheetName =
+            group.heading.replace(/[[\]*/\\?:]/g, "").slice(0, 31) ||
+            `Sheet${idx + 1}`;
+          XLSX.utils.book_append_sheet(
+            workbook,
+            XLSX.utils.json_to_sheet(data),
+            sheetName,
+          );
+        });
+        XLSX.writeFile(workbook, "All-Registrations.xlsx");
+      } else {
+        await ensureMalayalamFontFace();
+        await exportMultiTablePdf(
+          groups,
+          {
+            orgName,
+            title: "Registrations Report — All Categories",
+            filterSummary:
+              teamFilter !== ALL
+                ? buildFilterSummary([
+                    { label: "Team", value: filterLabels.teamName },
+                  ])
+                : "All categories · All genders",
+            continuous: continuousPrint,
+          },
+          "All-Registrations",
+        );
+      }
+      showToast(
+        `All registrations exported successfully (${kind === "excel" ? "Excel" : "PDF"}).`,
+        "success",
+      );
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : (err?.message ?? "Could not generate this export.");
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoadingKind(null);
+    }
+  };
+
   return (
     <ReportCard
       icon={ICONS.matrix}
@@ -376,6 +521,15 @@ function RegistrationMatrixCard({ categories, teams, orgName, showToast }) {
         </Field>
       </div>
 
+      <div className="mt-2.5">
+        <ToggleField
+          label="Continuous Print"
+          hint="Paper-saving: no forced page break between category/gender groups"
+          checked={continuousPrint}
+          onChange={setContinuousPrint}
+        />
+      </div>
+
       {!filtersReady && (
         <p className="mt-2 text-[11px] font-medium text-slate-400 dark:text-slate-500">
           Pick a category and gender to enable exports.
@@ -406,6 +560,21 @@ function RegistrationMatrixCard({ categories, teams, orgName, showToast }) {
           Download Excel
         </ActionButton>
       </div>
+
+      <div className="mt-2 flex gap-2">
+        <ActionButton
+          onClick={() => handleExportAll("pdf")}
+          loading={loadingKind === "allPdf"}
+        >
+          Export All (PDF)
+        </ActionButton>
+        <ActionButton
+          onClick={() => handleExportAll("excel")}
+          loading={loadingKind === "allExcel"}
+        >
+          Export All (Excel)
+        </ActionButton>
+      </div>
     </ReportCard>
   );
 }
@@ -414,15 +583,17 @@ function JudgeSheetsCard({ categories, orgName, showToast }) {
   const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [genderFilter, setGenderFilter] = useState(ALL);
   const [judgeCount, setJudgeCount] = useState(2);
+  const [continuousPrint, setContinuousPrint] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [loadingAll, setLoadingAll] = useState(false);
   const [error, setError] = useState(null);
 
   const filtersReady = categoryFilter !== ALL && genderFilter !== ALL;
 
-  async function fetchJudgeSheetEvents() {
+  async function fetchJudgeSheetEventsFor(categoryId, genderValue) {
     const params = new URLSearchParams({
-      category: categoryFilter,
-      gender: genderFilter,
+      category: categoryId,
+      gender: genderValue,
     });
     const result = await apiClient.get(
       `/registrations/matrix/?${params.toString()}`,
@@ -437,10 +608,10 @@ function JudgeSheetsCard({ categories, orgName, showToast }) {
     );
 
     const categoryName =
-      categories.find((c) => String(c.id) === String(categoryFilter))?.name ??
-      categoryFilter;
+      categories.find((c) => String(c.id) === String(categoryId))?.name ??
+      categoryId;
     const genderLabel =
-      GENDER_OPTIONS.find((g) => g.value === genderFilter)?.label ?? null;
+      GENDER_OPTIONS.find((g) => g.value === genderValue)?.label ?? null;
 
     return events
       .map((ev) => {
@@ -491,7 +662,10 @@ function JudgeSheetsCard({ categories, orgName, showToast }) {
     setError(null);
     setLoading(true);
     try {
-      const judgeSheetEvents = await fetchJudgeSheetEvents();
+      const judgeSheetEvents = await fetchJudgeSheetEventsFor(
+        categoryFilter,
+        genderFilter,
+      );
       if (judgeSheetEvents.length === 0) {
         setError("No registered students/groups found for this selection.");
         return;
@@ -500,6 +674,7 @@ function JudgeSheetsCard({ categories, orgName, showToast }) {
       await generateJudgeSheetsPDF(judgeSheetEvents, judgeCount, {
         orgName,
         filename: "Judge-Sheets",
+        continuousPrint,
       });
       showToast("Judge sheets generated successfully.", "success");
     } catch (err) {
@@ -508,6 +683,40 @@ function JudgeSheetsCard({ categories, orgName, showToast }) {
       showToast(message, "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGenerateAll = async () => {
+    setError(null);
+    setLoadingAll(true);
+    try {
+      const allEvents = [];
+      for (const cat of categories) {
+        for (const g of GENDER_OPTIONS) {
+          const judgeSheetEvents = await fetchJudgeSheetEventsFor(
+            String(cat.id),
+            g.value,
+          );
+          allEvents.push(...judgeSheetEvents);
+        }
+      }
+      if (allEvents.length === 0) {
+        setError("No registered students/groups found across any event.");
+        return;
+      }
+      await ensureMalayalamFontFace();
+      await generateJudgeSheetsPDF(allEvents, judgeCount, {
+        orgName,
+        filename: "All-Judge-Sheets",
+        continuousPrint,
+      });
+      showToast("All judge sheets generated successfully.", "success");
+    } catch (err) {
+      const message = err?.message ?? "Could not generate judge sheets.";
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoadingAll(false);
     }
   };
 
@@ -561,6 +770,15 @@ function JudgeSheetsCard({ categories, orgName, showToast }) {
         </Field>
       </div>
 
+      <div className="mt-2.5">
+        <ToggleField
+          label="Continuous Print"
+          hint="Paper-saving: pack sheets back-to-back across events with no forced page break"
+          checked={continuousPrint}
+          onChange={setContinuousPrint}
+        />
+      </div>
+
       {!filtersReady && (
         <p className="mt-2 text-[11px] font-medium text-slate-400 dark:text-slate-500">
           Pick a category and gender to enable this export.
@@ -574,14 +792,19 @@ function JudgeSheetsCard({ categories, orgName, showToast }) {
 
       <CardDivider />
 
-      <ActionButton
-        onClick={handleGenerate}
-        disabled={!filtersReady}
-        loading={loading}
-        primary
-      >
-        Generate Judge Sheets (PDF)
-      </ActionButton>
+      <div className="flex gap-2">
+        <ActionButton
+          onClick={handleGenerate}
+          disabled={!filtersReady}
+          loading={loading}
+          primary
+        >
+          Generate Judge Sheets (PDF)
+        </ActionButton>
+        <ActionButton onClick={handleGenerateAll} loading={loadingAll}>
+          Export All Judge Sheets
+        </ActionButton>
+      </div>
     </ReportCard>
   );
 }

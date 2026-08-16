@@ -179,53 +179,12 @@ export function buildExportTableNode({ columns, rows }) {
   return { columns, rows };
 }
 
-export async function exportTableToPdf(
-  { columns, rows },
-  { orgName, title, filterSummary },
-  filename,
-) {
-  const generatedAt = new Date();
-  const doc = new jsPDF({ unit: "pt", format: "a4" });
-  await registerMalayalamPdfFont(doc);
-
-  const contentTopPt = drawLetterhead(doc, { orgName, title, filterSummary });
-
-  const head = [columns.map((col) => col.label)];
-  const body = rows.map((row) =>
-    columns.map((col) => sanitizeCell(row[col.key])),
-  );
-
-  autoTable(doc, {
-    head,
-    body,
-    startY: contentTopPt,
-    margin: {
-      left: PDF_MARGIN_PT,
-      right: PDF_MARGIN_PT,
-      top: PDF_MARGIN_PT + 16,
-      bottom: PDF_MARGIN_PT + FOOTER_SPACE_PT,
-    },
-    theme: "grid",
-    styles: {
-      font: PDF_FONT_NAME,
-      fontSize: TABLE_FONT_SIZE,
-      cellPadding: CELL_PADDING,
-      textColor: INK,
-      lineColor: RULE,
-      lineWidth: 0.5,
-      overflow: "linebreak",
-      valign: "top",
-      fillColor: WHITE,
-    },
-    headStyles: {
-      fillColor: WHITE,
-      textColor: INK,
-      fontStyle: "bold",
-      fontSize: TABLE_FONT_SIZE,
-      cellPadding: CELL_PADDING,
-      halign: "center",
-      valign: "middle",
-    },
+// Shared autoTable hooks (tick marks, vertical headers, Malayalam/Arabic
+// shaping, repeated title on continuation pages) used by every plain-table
+// PDF export. Factored out so multi-table exports (e.g. "Export All") can
+// reuse identical per-cell rendering without duplicating ~150 lines per call.
+function createTableCellHooks(doc, columns, title) {
+  return {
     didParseCell: (data) => {
       const isHead = data.section === "head";
       const col = columns[data.column.index];
@@ -328,6 +287,152 @@ export async function exportTableToPdf(
         });
       }
     },
+  };
+}
+
+function baseTableStyles() {
+  return {
+    theme: "grid",
+    styles: {
+      font: PDF_FONT_NAME,
+      fontSize: TABLE_FONT_SIZE,
+      cellPadding: CELL_PADDING,
+      textColor: INK,
+      lineColor: RULE,
+      lineWidth: 0.5,
+      overflow: "linebreak",
+      valign: "top",
+      fillColor: WHITE,
+    },
+    headStyles: {
+      fillColor: WHITE,
+      textColor: INK,
+      fontStyle: "bold",
+      fontSize: TABLE_FONT_SIZE,
+      cellPadding: CELL_PADDING,
+      halign: "center",
+      valign: "middle",
+    },
+  };
+}
+
+export async function exportTableToPdf(
+  { columns, rows },
+  { orgName, title, filterSummary },
+  filename,
+) {
+  const generatedAt = new Date();
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  await registerMalayalamPdfFont(doc);
+
+  const contentTopPt = drawLetterhead(doc, { orgName, title, filterSummary });
+
+  const head = [columns.map((col) => col.label)];
+  const body = rows.map((row) =>
+    columns.map((col) => sanitizeCell(row[col.key])),
+  );
+
+  autoTable(doc, {
+    head,
+    body,
+    startY: contentTopPt,
+    margin: {
+      left: PDF_MARGIN_PT,
+      right: PDF_MARGIN_PT,
+      top: PDF_MARGIN_PT + 16,
+      bottom: PDF_MARGIN_PT + FOOTER_SPACE_PT,
+    },
+    ...baseTableStyles(),
+    ...createTableCellHooks(doc, columns, title),
+  });
+
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i = 0; i < totalPages; i += 1) {
+    doc.setPage(i + 1);
+    drawFooter(doc, generatedAt, i, totalPages);
+  }
+
+  doc.save(`${filename}.pdf`);
+}
+
+/**
+ * Export a sequence of independent tables (e.g. one Registration Matrix per
+ * category × gender combination) as a single PDF — used by "Export All".
+ *
+ * groups: [{ heading: string, columns, rows }]
+ *
+ * continuous:
+ *   true  -> "Continuous Print" (paper-saving) mode. The next group's
+ *            heading + table starts immediately below the previous table's
+ *            finalY on the same page (jspdf-autotable's own pagination still
+ *            kicks in if a table itself doesn't fit on the remaining page).
+ *   false -> standard behavior: every group starts on a fresh page.
+ */
+export async function exportMultiTablePdf(
+  groups,
+  { orgName, title, filterSummary, continuous = false },
+  filename,
+) {
+  const generatedAt = new Date();
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  await registerMalayalamPdfFont(doc);
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const bottomLimit = pageHeight - PDF_MARGIN_PT - FOOTER_SPACE_PT;
+  const GROUP_GAP_PT = 20;
+  const HEADING_RESERVE_PT = 34;
+
+  let y = drawLetterhead(doc, { orgName, title, filterSummary });
+
+  (groups ?? []).forEach((group, idx) => {
+    if (idx > 0) {
+      if (continuous) {
+        y += GROUP_GAP_PT;
+        // If there isn't even room for the heading + a single row before
+        // the footer, move on to the next page rather than orphaning the
+        // heading at the bottom of the current one.
+        if (y + HEADING_RESERVE_PT > bottomLimit) {
+          doc.addPage();
+          y = PDF_MARGIN_PT + 16;
+        }
+      } else {
+        doc.addPage();
+        y = PDF_MARGIN_PT + 16;
+      }
+    }
+
+    if (group.heading) {
+      y = drawWrappedText(doc, group.heading, PDF_MARGIN_PT, y + 12, {
+        fontSize: 12.5,
+        bold: true,
+        color: BRAND,
+        align: "left",
+        maxWidth: pageWidth - PDF_MARGIN_PT * 2,
+      });
+      y += 6;
+    }
+
+    const head = [group.columns.map((col) => col.label)];
+    const body = group.rows.map((row) =>
+      group.columns.map((col) => sanitizeCell(row[col.key])),
+    );
+
+    autoTable(doc, {
+      head,
+      body,
+      startY: y,
+      margin: {
+        left: PDF_MARGIN_PT,
+        right: PDF_MARGIN_PT,
+        top: PDF_MARGIN_PT + 16,
+        bottom: PDF_MARGIN_PT + FOOTER_SPACE_PT,
+      },
+      ...baseTableStyles(),
+      ...createTableCellHooks(doc, group.columns, title),
+    });
+
+    y = doc.lastAutoTable?.finalY ?? y;
   });
 
   const totalPages = doc.internal.getNumberOfPages();
