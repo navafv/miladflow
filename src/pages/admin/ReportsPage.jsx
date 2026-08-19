@@ -15,6 +15,7 @@ import {
 import { buildExportFilename } from "../../lib/exportFilename.js";
 import { ensureMalayalamFontFace } from "../../lib/pdfFonts.js";
 import { generateJudgeSheetsPDF } from "../../lib/judgeSheetsPdf.js";
+import { buildMatrixExportTable } from "../../lib/registrationMatrix.js";
 import { Toast, useToast } from "../../components/admin/Toast.jsx";
 
 async function downloadTablePdf({
@@ -240,35 +241,22 @@ const ICONS = {
 
 function buildMatrixTable(result) {
   const events = result?.events ?? [];
-  const students = result?.students ?? [];
+  const groupEntries = result?.group_entries ?? [];
   const registeredPairs = new Set(
     (result?.registered_pairs ?? []).map(
       ([studentId, eventId]) => `${studentId}:${eventId}`,
     ),
   );
+  const students = (result?.students ?? []).filter((s) =>
+    events.some((ev) => registeredPairs.has(`${s.id}:${ev.id}`)),
+  );
 
-  const columns = [
-    { key: "studentName", label: "Student Name" },
-    { key: "regNo", label: "Reg. No." },
-    { key: "team", label: "Team" },
-    ...events.map((ev) => ({
-      key: `event_${ev.id}`,
-      label: ev.name,
-      vertical: true,
-    })),
-  ];
-  const rows = students
-    .filter((s) => events.some((ev) => registeredPairs.has(`${s.id}:${ev.id}`)))
-    .map((s) => {
-      const row = { studentName: s.name, regNo: s.reg_no, team: s.team_name };
-      events.forEach((ev) => {
-        row[`event_${ev.id}`] = registeredPairs.has(`${s.id}:${ev.id}`)
-          ? "✓"
-          : "—";
-      });
-      return row;
-    });
-  return { columns, rows };
+  return buildMatrixExportTable({
+    events,
+    students,
+    registeredPairs,
+    groupEntries,
+  });
 }
 
 function RegistrationMatrixCard({ categories, teams, orgName, showToast }) {
@@ -306,34 +294,12 @@ function RegistrationMatrixCard({ categories, teams, orgName, showToast }) {
     const result = await apiClient.get(
       `/registrations/matrix/?${params.toString()}`,
     );
-    const events = result?.events ?? [];
-    const students = result?.students ?? [];
-    const registeredPairs = new Set(
-      (result?.registered_pairs ?? []).map(
-        ([studentId, eventId]) => `${studentId}:${eventId}`,
-      ),
-    );
-
-    const columns = [
-      { key: "studentName", label: "Student Name" },
-      { key: "regNo", label: "Reg. No." },
-      { key: "team", label: "Team" },
-      ...events.map((ev) => ({
-        key: `event_${ev.id}`,
-        label: ev.name,
-        vertical: true,
-      })),
-    ];
-    const rows = students.map((s) => {
-      const row = { studentName: s.name, regNo: s.reg_no, team: s.team_name };
-      events.forEach((ev) => {
-        row[`event_${ev.id}`] = registeredPairs.has(`${s.id}:${ev.id}`)
-          ? "✓"
-          : "—";
-      });
-      return row;
+    return buildMatrixExportTable({
+      events: result?.events ?? [],
+      students: result?.students ?? [],
+      registeredPairs: result?.registered_pairs ?? [],
+      groupEntries: result?.group_entries ?? [],
     });
-    return { columns, rows };
   }
 
   const filterSummaryParts = [

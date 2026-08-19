@@ -6,6 +6,12 @@ import ExportButtons from "../../components/admin/ExportButtons.jsx";
 import { Field, Select } from "../../components/admin/FormFields.jsx";
 import { PageHeader, Td } from "../../components/admin/TableShell.jsx";
 import { Toast, useToast } from "../../components/admin/Toast.jsx";
+import {
+  buildGroupLetterMaps,
+  buildMatrixExportTable,
+  resolveMatrixCell,
+  TICK,
+} from "../../lib/registrationMatrix.js";
 
 const ALL = "All";
 const GENDER_OPTIONS = [
@@ -48,24 +54,38 @@ const MatrixRow = memo(function MatrixRow({
   student,
   events,
   registeredPairs,
+  letterMapsByEvent,
 }) {
   return (
     <tr className="hover:bg-[#21F1A8]/5 dark:hover:bg-slate-800/30">
       <Td className="sticky left-0 z-10 min-w-[220px] bg-white dark:bg-[#262626] font-semibold text-slate-900 dark:text-white">
         <div>{student.name}</div>
         <div className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
-          {student.reg_no} · {student.team_name}
+          {student.reg_no} · {student.class_name} · {student.team_name}
         </div>
       </Td>
-      {events.map((ev) => (
-        <Td key={ev.id} className="min-w-[120px] text-center">
-          {registeredPairs.has(`${student.id}:${ev.id}`) ? (
-            <CheckIcon />
-          ) : (
-            <span className="text-slate-300 dark:text-slate-600">–</span>
-          )}
-        </Td>
-      ))}
+      {events.map((ev) => {
+        const isRegistered = registeredPairs.has(`${student.id}:${ev.id}`);
+        const cell = resolveMatrixCell({
+          event: ev,
+          studentId: student.id,
+          isRegistered,
+          letterMapsByEvent,
+        });
+        return (
+          <Td key={ev.id} className="min-w-[120px] text-center">
+            {cell === TICK ? (
+              <CheckIcon />
+            ) : cell === "—" ? (
+              <span className="text-slate-300 dark:text-slate-600">–</span>
+            ) : (
+              <span className="font-bold text-[#171717] dark:text-[#21F1A8]">
+                {cell}
+              </span>
+            )}
+          </Td>
+        );
+      })}
     </tr>
   );
 });
@@ -117,7 +137,14 @@ export default function RegistrationsViewPage() {
           ),
         );
         const groupEntries = result?.group_entries ?? [];
-        setMatrix({ events, students, registeredPairs, groupEntries });
+        const letterMapsByEvent = buildGroupLetterMaps(groupEntries);
+        setMatrix({
+          events,
+          students,
+          registeredPairs,
+          groupEntries,
+          letterMapsByEvent,
+        });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -142,26 +169,11 @@ export default function RegistrationsViewPage() {
 
   const { exportColumns, exportRows } = useMemo(() => {
     if (!matrix) return { exportColumns: [], exportRows: [] };
-    const columns = [
-      { key: "studentName", label: "Student Name" },
-      { key: "regNo", label: "Reg. No." },
-      { key: "team", label: "Team" },
-      ...matrix.events.map((ev) => ({
-        key: `event_${ev.id}`,
-        label: ev.name,
-        vertical: true,
-      })),
-    ];
-    const rows = matrix.students.map((s) => {
-      const row = {
-        studentName: s.name,
-        regNo: s.reg_no,
-        team: s.team_name,
-      };
-      matrix.events.forEach((ev) => {
-        row[`event_${ev.id}`] = isRegistered(s.id, ev.id) ? "✓" : "—";
-      });
-      return row;
+    const { columns, rows } = buildMatrixExportTable({
+      events: matrix.events,
+      students: matrix.students,
+      registeredPairs: matrix.registeredPairs,
+      groupEntries: matrix.groupEntries,
     });
     return { exportColumns: columns, exportRows: rows };
   }, [matrix]);
@@ -448,6 +460,7 @@ export default function RegistrationsViewPage() {
                           student={s}
                           events={matrix.events}
                           registeredPairs={matrix.registeredPairs}
+                          letterMapsByEvent={matrix.letterMapsByEvent}
                         />
                       ))}
                     </tbody>

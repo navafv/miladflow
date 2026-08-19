@@ -179,10 +179,6 @@ export function buildExportTableNode({ columns, rows }) {
   return { columns, rows };
 }
 
-// Shared autoTable hooks (tick marks, vertical headers, Malayalam/Arabic
-// shaping, repeated title on continuation pages) used by every plain-table
-// PDF export. Factored out so multi-table exports (e.g. "Export All") can
-// reuse identical per-cell rendering without duplicating ~150 lines per call.
 function createTableCellHooks(doc, columns, title) {
   return {
     didParseCell: (data) => {
@@ -203,6 +199,15 @@ function createTableCellHooks(doc, columns, title) {
         data.cell.text = [];
         data.cell._tick = true;
         return;
+      }
+
+      if (isHead === false && col?.vertical) {
+        const trimmed = String(data.cell.raw ?? "").trim();
+        if (/^[A-Z]+$/.test(trimmed)) {
+          data.cell.text = [];
+          data.cell._groupLetter = trimmed;
+          return;
+        }
       }
 
       const raw = data.cell.raw;
@@ -254,6 +259,22 @@ function createTableCellHooks(doc, columns, title) {
 
       if (cell._tick) {
         drawCheckMark(doc, cell);
+        return;
+      }
+
+      if (cell._groupLetter) {
+        drawTextLine(
+          doc,
+          cell._groupLetter,
+          cell.x + cell.width / 2,
+          cell.y + cell.height / 2 + TABLE_FONT_SIZE * 0.35,
+          {
+            fontSize: TABLE_FONT_SIZE + 1,
+            bold: true,
+            color: BRAND,
+            align: "center",
+          },
+        );
         return;
       }
 
@@ -355,19 +376,6 @@ export async function exportTableToPdf(
   doc.save(`${filename}.pdf`);
 }
 
-/**
- * Export a sequence of independent tables (e.g. one Registration Matrix per
- * category × gender combination) as a single PDF — used by "Export All".
- *
- * groups: [{ heading: string, columns, rows }]
- *
- * continuous:
- *   true  -> "Continuous Print" (paper-saving) mode. The next group's
- *            heading + table starts immediately below the previous table's
- *            finalY on the same page (jspdf-autotable's own pagination still
- *            kicks in if a table itself doesn't fit on the remaining page).
- *   false -> standard behavior: every group starts on a fresh page.
- */
 export async function exportMultiTablePdf(
   groups,
   { orgName, title, filterSummary, continuous = false },
@@ -389,9 +397,6 @@ export async function exportMultiTablePdf(
     if (idx > 0) {
       if (continuous) {
         y += GROUP_GAP_PT;
-        // If there isn't even room for the heading + a single row before
-        // the footer, move on to the next page rather than orphaning the
-        // heading at the bottom of the current one.
         if (y + HEADING_RESERVE_PT > bottomLimit) {
           doc.addPage();
           y = PDF_MARGIN_PT + 16;
