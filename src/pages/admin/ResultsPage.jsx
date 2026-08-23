@@ -180,8 +180,8 @@ export default function ResultsPage() {
       ),
     [placements, effectiveEventId],
   );
-  const first = placementsForEvent.find((p) => p.place === 1) ?? null;
-  const second = placementsForEvent.find((p) => p.place === 2) ?? null;
+  const firsts = placementsForEvent.filter((p) => p.place === 1);
+  const seconds = placementsForEvent.filter((p) => p.place === 2);
   const thirds = placementsForEvent.filter((p) => p.place === 3);
 
   const registeredStudents = useMemo(() => {
@@ -222,11 +222,11 @@ export default function ResultsPage() {
   const winners = useMemo(() => {
     const label = (p) => toWinnerLabel(p, students, groupEntries, teams);
     return {
-      1: first ? [label(first)].filter(Boolean) : [],
-      2: second ? [label(second)].filter(Boolean) : [],
+      1: firsts.map(label).filter(Boolean),
+      2: seconds.map(label).filter(Boolean),
       3: thirds.map(label).filter(Boolean),
     };
-  }, [first, second, thirds, students, groupEntries, teams]);
+  }, [firsts, seconds, thirds, students, groupEntries, teams]);
 
   const hasAnyWinner =
     winners[1].length + winners[2].length + winners[3].length > 0;
@@ -236,13 +236,11 @@ export default function ResultsPage() {
       if (!event) return;
       setPlacementError("");
 
-      const existing =
-        place === 1
-          ? first
-          : place === 2
-            ? second
-            : thirds.find((p) => placementMatchesRow(p, rowId, kind));
-      const isSameRow = existing && placementMatchesRow(existing, rowId, kind);
+      const placesForRank =
+        place === 1 ? firsts : place === 2 ? seconds : thirds;
+      const existing = placesForRank.find((p) =>
+        placementMatchesRow(p, rowId, kind),
+      );
 
       const payload = {
         event_id: event.id,
@@ -253,12 +251,9 @@ export default function ResultsPage() {
       };
 
       try {
-        if (isSameRow) {
+        if (existing) {
           await removePlacement(existing.id);
           showToast("Placement removed.", "success");
-        } else if (existing && place !== 3) {
-          await updatePlacement(existing.id, payload);
-          showToast("Placement updated successfully.", "success");
         } else {
           await createPlacement(payload);
           showToast("Placement saved successfully.", "success");
@@ -273,11 +268,10 @@ export default function ResultsPage() {
     },
     [
       event,
-      first,
-      second,
+      firsts,
+      seconds,
       thirds,
       removePlacement,
-      updatePlacement,
       createPlacement,
       refreshLeaderboard,
       showToast,
@@ -413,10 +407,10 @@ export default function ResultsPage() {
                         : "Team"}
                   </th>
                   <th className="border-b border-slate-200 dark:border-slate-800 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
-                    1st
+                    1st (multiple allowed)
                   </th>
                   <th className="border-b border-slate-200 dark:border-slate-800 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-[#21F1A8]">
-                    2nd
+                    2nd (multiple allowed)
                   </th>
                   <th className="border-b border-slate-200 dark:border-slate-800 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-400">
                     3rd (multiple allowed)
@@ -460,24 +454,20 @@ export default function ResultsPage() {
                     </td>
                     <td className="border-b border-slate-200 dark:border-slate-800 px-3 py-3 text-center">
                       <input
-                        type="radio"
-                        name="first"
-                        checked={
-                          !!first &&
-                          placementMatchesRow(first, row.id, row.kind)
-                        }
+                        type="checkbox"
+                        checked={firsts.some((p) =>
+                          placementMatchesRow(p, row.id, row.kind),
+                        )}
                         onChange={() => handleSetPlacement(1, row.id, row.kind)}
                         className="h-4 w-4 accent-amber-500"
                       />
                     </td>
                     <td className="border-b border-slate-200 dark:border-slate-800 px-3 py-3 text-center">
                       <input
-                        type="radio"
-                        name="second"
-                        checked={
-                          !!second &&
-                          placementMatchesRow(second, row.id, row.kind)
-                        }
+                        type="checkbox"
+                        checked={seconds.some((p) =>
+                          placementMatchesRow(p, row.id, row.kind),
+                        )}
                         onChange={() => handleSetPlacement(2, row.id, row.kind)}
                         className="h-4 w-4 accent-[#21F1A8]"
                       />
