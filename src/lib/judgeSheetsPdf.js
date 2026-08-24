@@ -214,11 +214,24 @@ function buildEventRows(doc, ev, detailMaxWidth) {
       true,
     );
 
+    const memberLines = (g.members ?? [])
+      .filter(Boolean)
+      .flatMap((m) =>
+        measureWrap(
+          doc,
+          `- ${formatRegNo(m)} · ${m.name ?? "—"}`,
+          detailMaxWidth,
+          DETAIL_FONT_SIZE,
+          false,
+        ),
+      );
+
     return {
       slNo: String(idx + 1),
       isGroup: true,
       groupNameLines,
-      totalLines: groupNameLines.length,
+      memberLines,
+      totalLines: groupNameLines.length + memberLines.length,
     };
   });
 }
@@ -309,6 +322,16 @@ function didDrawGroupCell(doc, data, chunkRows) {
     drawTextLine(doc, line, textX, textY, {
       fontSize: DETAIL_FONT_SIZE,
       bold: true,
+      color: INK,
+      align: "left",
+    });
+    textY += DETAIL_LINE_HEIGHT;
+  });
+
+  (meta.memberLines ?? []).forEach((line) => {
+    drawTextLine(doc, line, textX, textY, {
+      fontSize: DETAIL_FONT_SIZE,
+      bold: false,
       color: INK,
       align: "left",
     });

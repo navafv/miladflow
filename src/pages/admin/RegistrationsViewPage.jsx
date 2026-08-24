@@ -18,6 +18,16 @@ const GENDER_OPTIONS = [
   { value: "boys", label: "Boys" },
   { value: "girls", label: "Girls" },
 ];
+const STAGE_OPTIONS = [
+  { value: "stage", label: "Stage" },
+  { value: "off_stage", label: "Off-stage" },
+];
+
+function eventMatchesStageFilter(ev, stageFilter) {
+  if (stageFilter === ALL) return true;
+  const isStage = ev.is_stage ?? ev.isStage;
+  return stageFilter === "stage" ? Boolean(isStage) : !isStage;
+}
 
 function normalizeAuditRow(row) {
   return {
@@ -100,6 +110,7 @@ export default function RegistrationsViewPage() {
   const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [genderFilter, setGenderFilter] = useState(ALL);
   const [teamFilter, setTeamFilter] = useState(ALL);
+  const [stageFilter, setStageFilter] = useState(ALL);
 
   const filtersReady = categoryFilter !== ALL && genderFilter !== ALL;
 
@@ -167,16 +178,23 @@ export default function RegistrationsViewPage() {
   const isRegistered = (studentId, eventId) =>
     matrix?.registeredPairs.has(`${studentId}:${eventId}`) ?? false;
 
+  const filteredEvents = useMemo(() => {
+    if (!matrix) return [];
+    return matrix.events.filter((ev) =>
+      eventMatchesStageFilter(ev, stageFilter),
+    );
+  }, [matrix, stageFilter]);
+
   const { exportColumns, exportRows } = useMemo(() => {
     if (!matrix) return { exportColumns: [], exportRows: [] };
     const { columns, rows } = buildMatrixExportTable({
-      events: matrix.events,
+      events: filteredEvents,
       students: matrix.students,
       registeredPairs: matrix.registeredPairs,
       groupEntries: matrix.groupEntries,
     });
     return { exportColumns: columns, exportRows: rows };
-  }, [matrix]);
+  }, [matrix, filteredEvents]);
 
   const selectedFilterNames = useMemo(() => {
     if (!filtersReady) return null;
@@ -204,8 +222,13 @@ export default function RegistrationsViewPage() {
   const exportFilterLabels = useMemo(() => {
     if (!selectedFilterNames) return [];
     const { categoryName, genderLabel, teamName } = selectedFilterNames;
-    return [categoryName, genderLabel, teamName];
-  }, [selectedFilterNames]);
+    const stageLabel =
+      stageFilter !== ALL
+        ? (STAGE_OPTIONS.find((o) => o.value === stageFilter)?.label ??
+          stageFilter)
+        : null;
+    return [categoryName, genderLabel, teamName, stageLabel];
+  }, [selectedFilterNames, stageFilter]);
 
   const exportFilterSummaryParts = useMemo(() => {
     if (!selectedFilterNames) return [];
@@ -217,15 +240,21 @@ export default function RegistrationsViewPage() {
     if (teamFilter !== ALL) {
       parts.push({ label: "Team", value: teamName });
     }
+    if (stageFilter !== ALL) {
+      parts.push({
+        label: "Stage",
+        value: STAGE_OPTIONS.find((o) => o.value === stageFilter)?.label,
+      });
+    }
     return parts;
-  }, [selectedFilterNames, teamFilter]);
+  }, [selectedFilterNames, teamFilter, stageFilter]);
 
   const judgeSheetEvents = useMemo(() => {
     if (!matrix) return [];
     const categoryName = selectedFilterNames?.categoryName ?? null;
     const genderLabel = selectedFilterNames?.genderLabel ?? null;
 
-    return matrix.events
+    return filteredEvents
       .map((ev) => {
         const isGroup = ev.event_type === "group";
 
@@ -271,7 +300,7 @@ export default function RegistrationsViewPage() {
       .filter((ev) =>
         ev.isGroup ? ev.groups.length > 0 : ev.students.length > 0,
       );
-  }, [matrix, selectedFilterNames]);
+  }, [matrix, filteredEvents, selectedFilterNames]);
 
   const [auditRows, setAuditRows] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -357,7 +386,7 @@ export default function RegistrationsViewPage() {
 
       {tab === "report" && (
         <>
-          <div className="mb-5 grid gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#262626] p-4 sm:grid-cols-4">
+          <div className="mb-5 grid gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#262626] p-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Category">
               <Select
                 value={categoryFilter}
@@ -397,6 +426,22 @@ export default function RegistrationsViewPage() {
                 ))}
               </Select>
             </Field>
+            <Field
+              label="Stage / Off-stage"
+              hint="Optional — narrows by event type"
+            >
+              <Select
+                value={stageFilter}
+                onChange={(e) => setStageFilter(e.target.value)}
+              >
+                <option value={ALL}>All events</option>
+                {STAGE_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
           </div>
 
           {!filtersReady && (
@@ -422,11 +467,11 @@ export default function RegistrationsViewPage() {
               <p className="mb-3 text-xs font-semibold text-slate-500 dark:text-slate-400">
                 {matrix.students.length} student
                 {matrix.students.length === 1 ? "" : "s"} ×{" "}
-                {matrix.events.length} event
-                {matrix.events.length === 1 ? "" : "s"}
+                {filteredEvents.length} event
+                {filteredEvents.length === 1 ? "" : "s"}
               </p>
 
-              {matrix.events.length === 0 || matrix.students.length === 0 ? (
+              {filteredEvents.length === 0 || matrix.students.length === 0 ? (
                 <p className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#262626] px-4 py-10 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">
                   No students or events match this category/gender combination.
                 </p>
@@ -443,7 +488,7 @@ export default function RegistrationsViewPage() {
                         <th className="sticky left-0 top-0 z-30 min-w-[220px] border-b border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                           Student
                         </th>
-                        {matrix.events.map((ev) => (
+                        {filteredEvents.map((ev) => (
                           <th
                             key={ev.id}
                             className="sticky top-0 z-20 min-w-[120px] border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
@@ -458,7 +503,7 @@ export default function RegistrationsViewPage() {
                         <MatrixRow
                           key={s.id}
                           student={s}
-                          events={matrix.events}
+                          events={filteredEvents}
                           registeredPairs={matrix.registeredPairs}
                           letterMapsByEvent={matrix.letterMapsByEvent}
                         />

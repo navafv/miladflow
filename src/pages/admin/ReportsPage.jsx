@@ -15,6 +15,7 @@ import {
 import { buildExportFilename } from "../../lib/exportFilename.js";
 import { ensureMalayalamFontFace } from "../../lib/pdfFonts.js";
 import { generateJudgeSheetsPDF } from "../../lib/judgeSheetsPdf.js";
+import { generateStageSlipsPDF } from "../../lib/stageSlipsPdf.js";
 import { buildMatrixExportTable } from "../../lib/registrationMatrix.js";
 import { Toast, useToast } from "../../components/admin/Toast.jsx";
 
@@ -68,6 +69,16 @@ const GENDER_OPTIONS = [
   { value: "boys", label: "Boys" },
   { value: "girls", label: "Girls" },
 ];
+const STAGE_OPTIONS = [
+  { value: "stage", label: "Stage" },
+  { value: "off_stage", label: "Off-stage" },
+];
+
+function eventMatchesStageFilter(ev, stageValue) {
+  if (stageValue === ALL) return true;
+  const isStage = ev.is_stage ?? ev.isStage;
+  return stageValue === "stage" ? Boolean(isStage) : !isStage;
+}
 
 function ReportCard({ icon, title, description, children }) {
   return (
@@ -235,6 +246,18 @@ const ICONS = {
         strokeLinecap="round"
       />
       <path d="M14.5 6.5 17.5 9.5M17.5 6.5 14.5 9.5" strokeLinecap="round" />
+    </svg>
+  ),
+  stageSlip: (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      className="h-5 w-5"
+    >
+      <rect x="4" y="2.5" width="12" height="15" rx="1.5" />
+      <path d="M7 6.5h6M7 9.5h6M7 12.5h3.5" strokeLinecap="round" />
     </svg>
   ),
 };
@@ -545,9 +568,85 @@ function RegistrationMatrixCard({ categories, teams, orgName, showToast }) {
   );
 }
 
+async function fetchFilteredEventsFor(
+  categoryId,
+  genderValue,
+  stageValue,
+  categories,
+) {
+  const params = new URLSearchParams({
+    category: categoryId,
+    gender: genderValue,
+  });
+  const result = await apiClient.get(
+    `/registrations/matrix/?${params.toString()}`,
+  );
+  const events = (result?.events ?? []).filter((ev) =>
+    eventMatchesStageFilter(ev, stageValue),
+  );
+  const students = result?.students ?? [];
+  const groupEntries = result?.group_entries ?? [];
+  const registeredPairs = new Set(
+    (result?.registered_pairs ?? []).map(
+      ([studentId, eventId]) => `${studentId}:${eventId}`,
+    ),
+  );
+
+  const categoryName =
+    categories.find((c) => String(c.id) === String(categoryId))?.name ??
+    categoryId;
+  const genderLabel =
+    GENDER_OPTIONS.find((g) => g.value === genderValue)?.label ?? null;
+
+  return events
+    .map((ev) => {
+      const isGroup = ev.event_type === "group";
+      if (isGroup) {
+        const groups = groupEntries
+          .filter((g) => g.event_id === ev.id)
+          .map((g) => ({
+            groupName: g.group_name,
+            teamName: g.team_name,
+            members: (g.students ?? []).map((s) => ({
+              regNo: s.reg_no,
+              name: s.name,
+              teamName: s.team_name,
+              className: s.class_name,
+            })),
+          }))
+          .filter((g) => g.members.length > 0);
+        return {
+          eventName: ev.name,
+          categoryLabel: categoryName,
+          genderLabel,
+          isGroup: true,
+          groups,
+        };
+      }
+      return {
+        eventName: ev.name,
+        categoryLabel: categoryName,
+        genderLabel,
+        isGroup: false,
+        students: students
+          .filter((s) => registeredPairs.has(`${s.id}:${ev.id}`))
+          .map((s) => ({
+            regNo: s.reg_no,
+            name: s.name,
+            teamName: s.team_name,
+            className: s.class_name,
+          })),
+      };
+    })
+    .filter((ev) =>
+      ev.isGroup ? ev.groups.length > 0 : ev.students.length > 0,
+    );
+}
+
 function JudgeSheetsCard({ categories, orgName, showToast }) {
   const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [genderFilter, setGenderFilter] = useState(ALL);
+  const [stageFilter, setStageFilter] = useState(ALL);
   const [judgeCount, setJudgeCount] = useState(2);
   const [continuousPrint, setContinuousPrint] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -556,81 +655,15 @@ function JudgeSheetsCard({ categories, orgName, showToast }) {
 
   const filtersReady = categoryFilter !== ALL && genderFilter !== ALL;
 
-  async function fetchJudgeSheetEventsFor(categoryId, genderValue) {
-    const params = new URLSearchParams({
-      category: categoryId,
-      gender: genderValue,
-    });
-    const result = await apiClient.get(
-      `/registrations/matrix/?${params.toString()}`,
-    );
-    const events = result?.events ?? [];
-    const students = result?.students ?? [];
-    const groupEntries = result?.group_entries ?? [];
-    const registeredPairs = new Set(
-      (result?.registered_pairs ?? []).map(
-        ([studentId, eventId]) => `${studentId}:${eventId}`,
-      ),
-    );
-
-    const categoryName =
-      categories.find((c) => String(c.id) === String(categoryId))?.name ??
-      categoryId;
-    const genderLabel =
-      GENDER_OPTIONS.find((g) => g.value === genderValue)?.label ?? null;
-
-    return events
-      .map((ev) => {
-        const isGroup = ev.event_type === "group";
-        if (isGroup) {
-          const groups = groupEntries
-            .filter((g) => g.event_id === ev.id)
-            .map((g) => ({
-              groupName: g.group_name,
-              teamName: g.team_name,
-              members: (g.students ?? []).map((s) => ({
-                regNo: s.reg_no,
-                name: s.name,
-                teamName: s.team_name,
-                className: s.class_name,
-              })),
-            }))
-            .filter((g) => g.members.length > 0);
-          return {
-            eventName: ev.name,
-            categoryLabel: categoryName,
-            genderLabel,
-            isGroup: true,
-            groups,
-          };
-        }
-        return {
-          eventName: ev.name,
-          categoryLabel: categoryName,
-          genderLabel,
-          isGroup: false,
-          students: students
-            .filter((s) => registeredPairs.has(`${s.id}:${ev.id}`))
-            .map((s) => ({
-              regNo: s.reg_no,
-              name: s.name,
-              teamName: s.team_name,
-              className: s.class_name,
-            })),
-        };
-      })
-      .filter((ev) =>
-        ev.isGroup ? ev.groups.length > 0 : ev.students.length > 0,
-      );
-  }
-
   const handleGenerate = async () => {
     setError(null);
     setLoading(true);
     try {
-      const judgeSheetEvents = await fetchJudgeSheetEventsFor(
+      const judgeSheetEvents = await fetchFilteredEventsFor(
         categoryFilter,
         genderFilter,
+        stageFilter,
+        categories,
       );
       if (judgeSheetEvents.length === 0) {
         setError("No registered students/groups found for this selection.");
@@ -659,9 +692,11 @@ function JudgeSheetsCard({ categories, orgName, showToast }) {
       const allEvents = [];
       for (const cat of categories) {
         for (const g of GENDER_OPTIONS) {
-          const judgeSheetEvents = await fetchJudgeSheetEventsFor(
+          const judgeSheetEvents = await fetchFilteredEventsFor(
             String(cat.id),
             g.value,
+            stageFilter,
+            categories,
           );
           allEvents.push(...judgeSheetEvents);
         }
@@ -722,6 +757,25 @@ function JudgeSheetsCard({ categories, orgName, showToast }) {
       </div>
 
       <div className="mt-2.5">
+        <Field
+          label="Stage / Off-stage"
+          hint="Optional — narrows by event type"
+        >
+          <Select
+            value={stageFilter}
+            onChange={(e) => setStageFilter(e.target.value)}
+          >
+            <option value={ALL}>All events</option>
+            {STAGE_OPTIONS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+
+      <div className="mt-2.5">
         <Field label="Number of Judges" hint="Adds one score column per judge">
           <Select
             value={judgeCount}
@@ -769,6 +823,164 @@ function JudgeSheetsCard({ categories, orgName, showToast }) {
         </ActionButton>
         <ActionButton onClick={handleGenerateAll} loading={loadingAll}>
           Export All Judge Sheets
+        </ActionButton>
+      </div>
+    </ReportCard>
+  );
+}
+
+function StageSlipsCard({ categories, orgName, showToast }) {
+  const [categoryFilter, setCategoryFilter] = useState(ALL);
+  const [genderFilter, setGenderFilter] = useState(ALL);
+  const [stageFilter, setStageFilter] = useState(ALL);
+  const [loading, setLoading] = useState(false);
+  const [loadingAll, setLoadingAll] = useState(false);
+  const [error, setError] = useState(null);
+
+  const filtersReady = categoryFilter !== ALL && genderFilter !== ALL;
+
+  const handleGenerate = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const stageSlipEvents = await fetchFilteredEventsFor(
+        categoryFilter,
+        genderFilter,
+        stageFilter,
+        categories,
+      );
+      if (stageSlipEvents.length === 0) {
+        setError("No registered students/groups found for this selection.");
+        return;
+      }
+      await ensureMalayalamFontFace();
+      await generateStageSlipsPDF(stageSlipEvents, {
+        orgName,
+        filename: "Stage-Slips",
+      });
+      showToast("Stage slips generated successfully.", "success");
+    } catch (err) {
+      const message = err?.message ?? "Could not generate stage slips.";
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGenerateAll = async () => {
+    setError(null);
+    setLoadingAll(true);
+    try {
+      const allEvents = [];
+      for (const cat of categories) {
+        for (const g of GENDER_OPTIONS) {
+          const stageSlipEvents = await fetchFilteredEventsFor(
+            String(cat.id),
+            g.value,
+            stageFilter,
+            categories,
+          );
+          allEvents.push(...stageSlipEvents);
+        }
+      }
+      if (allEvents.length === 0) {
+        setError("No registered students/groups found across any event.");
+        return;
+      }
+      await ensureMalayalamFontFace();
+      await generateStageSlipsPDF(allEvents, {
+        orgName,
+        filename: "All-Stage-Slips",
+      });
+      showToast("All stage slips generated successfully.", "success");
+    } catch (err) {
+      const message = err?.message ?? "Could not generate stage slips.";
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoadingAll(false);
+    }
+  };
+
+  return (
+    <ReportCard
+      icon={ICONS.stageSlip}
+      title="Stage Slips"
+      description="Printable call sheets for compères — reg no., name, class, team."
+    >
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <Field label="Category">
+          <Select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value={ALL}>All / Select…</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Gender">
+          <Select
+            value={genderFilter}
+            onChange={(e) => setGenderFilter(e.target.value)}
+          >
+            <option value={ALL}>All / Select…</option>
+            {GENDER_OPTIONS.map((g) => (
+              <option key={g.value} value={g.value}>
+                {g.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+
+      <div className="mt-2.5">
+        <Field
+          label="Stage / Off-stage"
+          hint="Optional — narrows by event type"
+        >
+          <Select
+            value={stageFilter}
+            onChange={(e) => setStageFilter(e.target.value)}
+          >
+            <option value={ALL}>All events</option>
+            {STAGE_OPTIONS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+
+      {!filtersReady && (
+        <p className="mt-2 text-[11px] font-medium text-slate-400 dark:text-slate-500">
+          Pick a category and gender to enable this export.
+        </p>
+      )}
+      {error && (
+        <p className="mt-2 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+          {error}
+        </p>
+      )}
+
+      <CardDivider />
+
+      <div className="flex gap-2">
+        <ActionButton
+          onClick={handleGenerate}
+          disabled={!filtersReady}
+          loading={loading}
+          primary
+        >
+          Generate Stage Slips (PDF)
+        </ActionButton>
+        <ActionButton onClick={handleGenerateAll} loading={loadingAll}>
+          Export All Stage Slips
         </ActionButton>
       </div>
     </ReportCard>
@@ -1377,6 +1589,11 @@ export default function ReportsPage() {
             showToast={showToast}
           />
           <JudgeSheetsCard
+            categories={categories}
+            orgName={orgName}
+            showToast={showToast}
+          />
+          <StageSlipsCard
             categories={categories}
             orgName={orgName}
             showToast={showToast}
