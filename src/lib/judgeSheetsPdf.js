@@ -219,7 +219,7 @@ function buildEventRows(doc, ev, detailMaxWidth) {
       .flatMap((m) =>
         measureWrap(
           doc,
-          `- ${formatRegNo(m)} · ${m.name ?? "—"}`,
+          `- ${formatRegNo(m)}`,
           detailMaxWidth,
           DETAIL_FONT_SIZE,
           false,
