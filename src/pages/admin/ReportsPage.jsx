@@ -1148,6 +1148,7 @@ async function downloadGroupedResultsPdf({
 
 function ResultsCard({ categories, events, students, orgName, showToast }) {
   const [categoryFilter, setCategoryFilter] = useState(ALL);
+  const [stageFilter, setStageFilter] = useState(ALL);
   const [allResults, setAllResults] = useState(true);
   const [loadingKind, setLoadingKind] = useState(null);
   const [error, setError] = useState(null);
@@ -1155,6 +1156,11 @@ function ResultsCard({ categories, events, students, orgName, showToast }) {
   const categoryName =
     categories.find((c) => String(c.id) === String(categoryFilter))?.name ??
     categoryFilter;
+  const stageLabel =
+    stageFilter !== ALL
+      ? (STAGE_OPTIONS.find((o) => o.value === stageFilter)?.label ??
+        stageFilter)
+      : null;
 
   async function fetchResultRows() {
     const [placementsRaw, leaderboardRaw] = await Promise.all([
@@ -1172,10 +1178,20 @@ function ResultsCard({ categories, events, students, orgName, showToast }) {
     const studentsById = new Map(students.map((s) => [s.id, s]));
 
     const scopedPlacements = placements.filter((p) => {
-      if (allResults || categoryFilter === ALL) return true;
       const ev = eventsById.get(p.event?.id ?? p.event_id);
-      const evCategoryId = ev?.category?.id ?? ev?.category_id;
-      return String(evCategoryId) === String(categoryFilter);
+
+      if (!allResults && categoryFilter !== ALL) {
+        const evCategoryId = ev?.category?.id ?? ev?.category_id;
+        if (String(evCategoryId) !== String(categoryFilter)) return false;
+      }
+
+      if (stageFilter !== ALL) {
+        if (!eventMatchesStageFilter(ev ?? p.event ?? {}, stageFilter)) {
+          return false;
+        }
+      }
+
+      return true;
     });
 
     const sections = groupAndSortResults(
@@ -1232,10 +1248,19 @@ function ResultsCard({ categories, events, students, orgName, showToast }) {
         return;
       }
 
-      const filterLabels = allResults ? [] : [categoryName];
-      const filterSummary = allResults
-        ? "All categories"
-        : buildFilterSummary([{ label: "Category", value: categoryName }]);
+      const filterLabels = [
+        ...(allResults ? [] : [categoryName]),
+        ...(stageLabel ? [stageLabel] : []),
+      ];
+      const filterSummaryParts = [];
+      filterSummaryParts.push({
+        label: "Category",
+        value: allResults ? "All categories" : categoryName,
+      });
+      if (stageLabel) {
+        filterSummaryParts.push({ label: "Stage", value: stageLabel });
+      }
+      const filterSummary = buildFilterSummary(filterSummaryParts);
 
       if (kind === "excel") {
         const dynamicFilename = buildExportFilename({
@@ -1318,24 +1343,41 @@ function ResultsCard({ categories, events, students, orgName, showToast }) {
             ))}
           </Select>
         </Field>
-        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white/70 px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-[#171717]/50">
-          <span className="font-medium text-slate-700 dark:text-slate-200">
-            All Results
-          </span>
-          <span
-            onClick={() => setAllResults((v) => !v)}
-            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-              allResults ? "bg-[#21F1A8]" : "bg-slate-200 dark:bg-slate-700"
-            }`}
+        <Field
+          label="Stage / Off-stage"
+          hint="Optional — narrows by event type"
+        >
+          <Select
+            value={stageFilter}
+            onChange={(e) => setStageFilter(e.target.value)}
           >
-            <span
-              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${
-                allResults ? "left-5" : "left-0.5"
-              }`}
-            />
-          </span>
-        </label>
+            <option value={ALL}>All events</option>
+            {STAGE_OPTIONS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
       </div>
+
+      <label className="mt-2.5 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white/70 px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-[#171717]/50">
+        <span className="font-medium text-slate-700 dark:text-slate-200">
+          All Results
+        </span>
+        <span
+          onClick={() => setAllResults((v) => !v)}
+          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+            allResults ? "bg-[#21F1A8]" : "bg-slate-200 dark:bg-slate-700"
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${
+              allResults ? "left-5" : "left-0.5"
+            }`}
+          />
+        </span>
+      </label>
 
       {!allResults && categoryFilter === ALL && (
         <p className="mt-2 text-[11px] font-medium text-slate-400 dark:text-slate-500">
