@@ -407,13 +407,13 @@ export default function ResultsPage() {
                         : "Team"}
                   </th>
                   <th className="border-b border-slate-200 dark:border-slate-800 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
-                    1st (multiple allowed)
+                    1st
                   </th>
                   <th className="border-b border-slate-200 dark:border-slate-800 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-[#21F1A8]">
-                    2nd (multiple allowed)
+                    2nd
                   </th>
                   <th className="border-b border-slate-200 dark:border-slate-800 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-400">
-                    3rd (multiple allowed)
+                    3rd
                   </th>
                 </tr>
               </thead>
