@@ -5,6 +5,7 @@ import PublicUnavailable from "./PublicUnavailable.jsx";
 
 const MASTER_ROTATE_MS = 12_000;
 const INNER_ROTATE_MS = 8_000;
+const TEAM_TICKER_ROTATE_MS = 3_000;
 
 const HAPPENING_PAGE_SIZE = 6;
 const RESULTS_PAGE_SIZE = 2;
@@ -508,22 +509,25 @@ function StatusBadge({ status }) {
   return null;
 }
 
-function SlideShell({ accentColor, icon, title, children }) {
+function SlideShell({ accentColor, icon, title, headerRight, children }) {
   return (
     <div className="tv-slide flex h-full w-full flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-xl dark:border-white/10 dark:bg-[#141414] sm:rounded-3xl sm:p-6 lg:p-10 2xl:p-12">
-      <div className="mb-4 flex shrink-0 items-center gap-3 sm:mb-6 sm:gap-4 lg:mb-8">
-        {icon ?? (
-          <span
-            className="h-3 w-3 shrink-0 rounded-full sm:h-4 sm:w-4"
-            style={{
-              backgroundColor: accentColor,
-              boxShadow: `0 0 15px 3px ${accentColor}`,
-            }}
-          />
-        )}
-        <h3 className="text-[clamp(1.1rem,2.2vw,3rem)] font-bold uppercase tracking-wide text-slate-900 dark:text-white">
-          {title}
-        </h3>
+      <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3 sm:mb-6 sm:gap-4 lg:mb-8">
+        <div className="flex items-center gap-3 sm:gap-4">
+          {icon ?? (
+            <span
+              className="h-3 w-3 shrink-0 rounded-full sm:h-4 sm:w-4"
+              style={{
+                backgroundColor: accentColor,
+                boxShadow: `0 0 15px 3px ${accentColor}`,
+              }}
+            />
+          )}
+          <h3 className="text-[clamp(1.1rem,2.2vw,3rem)] font-bold uppercase tracking-wide text-slate-900 dark:text-white">
+            {title}
+          </h3>
+        </div>
+        {headerRight}
       </div>
       {children}
     </div>
@@ -798,17 +802,70 @@ function ResultEventCard({ group }) {
   );
 }
 
-function LatestResults({ groupedResults, pageIndex, pageCount }) {
+function TeamPointsTicker({ teams }) {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    setIndex(0);
+  }, [teams.length]);
+
+  useEffect(() => {
+    if (teams.length <= 1) return undefined;
+    const id = setInterval(() => {
+      setIndex((i) => (i + 1) % teams.length);
+    }, TEAM_TICKER_ROTATE_MS);
+    return () => clearInterval(id);
+  }, [teams.length]);
+
+  if (!teams || teams.length === 0) return null;
+
+  const safeIndex = index % teams.length;
+  const team = teams[safeIndex];
+  const color = PLACE_COLORS[safeIndex + 1] ?? "#fbbf24";
+
+  return (
+    <div
+      key={team.id}
+      className="tv-fade flex shrink-0 items-center gap-2.5 rounded-2xl border px-3 py-2 sm:gap-3 sm:px-5 sm:py-3"
+      style={{ borderColor: `${color}40`, backgroundColor: `${color}14` }}
+    >
+      <span
+        className="shrink-0 rounded-full px-2.5 py-1 text-[clamp(0.6rem,0.8vw,0.95rem)] font-black"
+        style={{ color, backgroundColor: `${color}22` }}
+      >
+        #{safeIndex + 1}
+      </span>
+      <span className="line-clamp-1 max-w-[9rem] text-[clamp(0.85rem,1.2vw,1.6rem)] font-extrabold text-slate-900 dark:text-white sm:max-w-[14rem]">
+        {team.name}
+      </span>
+      <span
+        className="shrink-0 text-[clamp(1.05rem,1.7vw,2.25rem)] font-black leading-none"
+        style={{ color }}
+      >
+        {team.points}
+        <span className="ml-1 text-[0.55em] font-bold text-slate-500 dark:text-slate-400">
+          pts
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function LatestResults({ groupedResults, pageIndex, pageCount, teams }) {
   const page = groupedResults.slice(
     pageIndex * RESULTS_PAGE_SIZE,
     pageIndex * RESULTS_PAGE_SIZE + RESULTS_PAGE_SIZE,
   );
 
   return (
-    <SlideShell accentColor="#fbbf24" title="Latest Results">
+    <SlideShell
+      accentColor="#fbbf24"
+      title="Latest Results"
+      headerRight={<TeamPointsTicker teams={teams} />}
+    >
       <div
         key={pageIndex}
-        className="tv-fade grid min-h-0 flex-1 auto-rows-fr grid-cols-1 place-content-center gap-5 sm:grid-cols-2 sm:gap-6 lg:gap-8"
+        className="tv-fade grid min-h-0 flex-1 auto-rows-fr place-content-center gap-5 sm:grid-cols-2 sm:gap-6 lg:gap-8 grid-cols-1"
       >
         {page.length === 0 && (
           <div className="col-span-full flex items-center justify-center text-[clamp(0.9rem,1.4vw,1.9rem)] text-slate-400 dark:text-slate-500">
@@ -1051,6 +1108,7 @@ export default function LiveTvDashboard() {
             groupedResults={groupedResults}
             pageIndex={slideState.page}
             pageCount={resultsPageCount}
+            teams={rankedTeams}
           />
         )}
       </main>
