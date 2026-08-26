@@ -11,15 +11,15 @@ const HAPPENING_PAGE_SIZE = 6;
 const RESULTS_PAGE_SIZE = 2;
 
 const PLACE_COLORS = {
-  1: "#FFC542",
-  2: "#B8C4D9",
-  3: "#E8A26B",
+  1: "#21F1A8",
+  2: "#38bdf8",
+  3: "#fbbf24",
 };
 
 const PLACE_GLOW = {
-  1: "rgba(255, 197, 66, 0.45)",
-  2: "rgba(184, 196, 217, 0.4)",
-  3: "rgba(232, 162, 107, 0.4)",
+  1: "rgba(33, 241, 168, 0.45)",
+  2: "rgba(56, 189, 248, 0.4)",
+  3: "rgba(251, 191, 36, 0.4)",
 };
 
 const PLACE_LABELS = {
