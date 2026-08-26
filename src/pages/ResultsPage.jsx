@@ -7,6 +7,11 @@ import PublicUnavailable from "../components/PublicUnavailable.jsx";
 import { apiClient, ApiError } from "../lib/apiClient.js";
 import { usePublicResource } from "../lib/usePublicResource.js";
 import { Toast, useToast } from "../components/admin/Toast.jsx";
+import {
+  exportTableToPdf,
+  buildFilterSummary,
+} from "../components/admin/ExportButtons.jsx";
+import { buildExportFilename } from "../lib/exportFilename.js";
 
 const TABS = [
   { key: "all", label: "All Results" },
@@ -367,10 +372,41 @@ function normalizeStudentRow(row) {
     id: row.student_id,
     rank: row.rank,
     name: row.student_name,
+    class:
+      row.class_name?.trim?.() ||
+      row.student_class?.trim?.() ||
+      row.className?.trim?.() ||
+      "—",
     category: row.category_name,
     team: row.team_name,
+    gender: row.gender ?? row.student_gender ?? null,
     totalPoints: row.total_points ?? 0,
   };
+}
+
+const GENDER_LABEL = { boys: "Boys", girls: "Girls" };
+
+function DownloadPdfIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      className="h-3.5 w-3.5"
+    >
+      <path
+        d="M10 2.5v10m0 0-3.5-3.5M10 12.5 13.5 9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M3.5 14v1.5A1.5 1.5 0 0 0 5 17h10a1.5 1.5 0 0 0 1.5-1.5V14"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 function StandingsRow({ rank, title, subtitle, points, index = 0 }) {
@@ -472,10 +508,11 @@ function TeamStandings({ slug }) {
   );
 }
 
-function StudentStandings({ slug }) {
+function StudentStandings({ slug, madrassaName, showToast }) {
   const { categories } = useResultFilterOptions(slug);
   const [category, setCategory] = useState(CATEGORY_ALL);
   const [gender, setGender] = useState("all");
+  const [exporting, setExporting] = useState(false);
 
   const params = new URLSearchParams();
   if (category !== CATEGORY_ALL) params.set("category", category);
@@ -490,36 +527,104 @@ function StudentStandings({ slug }) {
     return list.map(normalizeStudentRow);
   }, [data]);
 
+  const categoryLabel =
+    category === CATEGORY_ALL
+      ? "All Categories"
+      : (categories.find((c) => String(c.id) === String(category))?.name ??
+        "All Categories");
+  const genderLabel =
+    gender === "all" ? "All Students" : (GENDER_LABEL[gender] ?? gender);
+
+  const handleExportPdf = async () => {
+    if (exporting || rows.length === 0) return;
+    setExporting(true);
+    try {
+      const columns = [
+        { key: "rank", label: "Rank" },
+        { key: "name", label: "Student Name" },
+        { key: "class", label: "Class" },
+        { key: "category", label: "Category" },
+        { key: "gender", label: "Gender" },
+        { key: "team", label: "Team" },
+        { key: "points", label: "Total Points" },
+      ];
+      const pdfRows = rows.map((row) => ({
+        rank: row.rank,
+        name: row.name,
+        class: row.class,
+        category: row.category ?? "—",
+        gender: GENDER_LABEL[row.gender] ?? (row.gender || "—"),
+        team: row.team ?? "—",
+        points: row.totalPoints,
+      }));
+
+      const filterSummary = buildFilterSummary([
+        { label: "Category", value: categoryLabel },
+        { label: "Gender", value: genderLabel },
+      ]);
+      const filename = buildExportFilename({
+        baseName: "Top_Students",
+        filters: [categoryLabel, genderLabel],
+        allLabel: "All_Students",
+      });
+
+      await exportTableToPdf(
+        { columns, rows: pdfRows },
+        {
+          orgName: madrassaName,
+          title: "Standings — Top Students",
+          filterSummary,
+        },
+        filename,
+      );
+    } catch (err) {
+      showToast?.("Could not generate the PDF. Please try again.", "error");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <label className="flex flex-col gap-1 px-1 text-xs font-semibold text-neutral-500 dark:text-neutral-400 sm:w-64">
-          Category
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className={`rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-[#171717] transition-all duration-200 dark:border-white/10 dark:bg-[#171717] dark:text-white ${focusRing}`}
-          >
-            <option value={CATEGORY_ALL}>All Categories</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 px-1 text-xs font-semibold text-neutral-500 dark:text-neutral-400 sm:w-48">
-          Gender
-          <select
-            value={gender}
-            onChange={(e) => setGender(e.target.value)}
-            className={`rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-[#171717] transition-all duration-200 dark:border-white/10 dark:bg-[#171717] dark:text-white ${focusRing}`}
-          >
-            <option value="all">All Students</option>
-            <option value="boys">Boys</option>
-            <option value="girls">Girls</option>
-          </select>
-        </label>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <label className="flex flex-col gap-1 px-1 text-xs font-semibold text-neutral-500 dark:text-neutral-400 sm:w-64">
+            Category
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className={`rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-[#171717] transition-all duration-200 dark:border-white/10 dark:bg-[#171717] dark:text-white ${focusRing}`}
+            >
+              <option value={CATEGORY_ALL}>All Categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 px-1 text-xs font-semibold text-neutral-500 dark:text-neutral-400 sm:w-48">
+            Gender
+            <select
+              value={gender}
+              onChange={(e) => setGender(e.target.value)}
+              className={`rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-[#171717] transition-all duration-200 dark:border-white/10 dark:bg-[#171717] dark:text-white ${focusRing}`}
+            >
+              <option value="all">All Students</option>
+              <option value="boys">Boys</option>
+              <option value="girls">Girls</option>
+            </select>
+          </label>
+        </div>
+        <button
+          type="button"
+          onClick={handleExportPdf}
+          disabled={exporting || loading || rows.length === 0}
+          className={`flex items-center justify-center gap-1.5 self-start rounded-lg bg-[#21F1A8] px-3.5 py-2 text-xs font-semibold text-[#171717] shadow transition-all duration-200 hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 sm:self-auto ${focusRing}`}
+        >
+          <DownloadPdfIcon />
+          {exporting ? "Preparing PDF…" : "Export PDF"}
+        </button>
       </div>
       <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#262626] dark:shadow-none">
         <StandingsList
@@ -542,7 +647,7 @@ function StudentStandings({ slug }) {
   );
 }
 
-function StandingsTab({ slug }) {
+function StandingsTab({ slug, madrassaName, showToast }) {
   const [view, setView] = useState(STANDINGS_VIEWS[0].key);
 
   return (
@@ -568,7 +673,11 @@ function StandingsTab({ slug }) {
           <TeamStandings slug={slug} />
         </div>
       ) : (
-        <StudentStandings slug={slug} />
+        <StudentStandings
+          slug={slug}
+          madrassaName={madrassaName}
+          showToast={showToast}
+        />
       )}
     </div>
   );
@@ -797,7 +906,11 @@ export default function ResultsPage() {
         ) : tab === "event" ? (
           <EventResultsTab slug={slug} />
         ) : (
-          <StandingsTab slug={slug} />
+          <StandingsTab
+            slug={slug}
+            madrassaName={madrassaName}
+            showToast={showToast}
+          />
         )}
       </main>
       <MadrassaFooter madrassaName={madrassaName} />
