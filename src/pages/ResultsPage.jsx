@@ -513,19 +513,31 @@ function StudentStandings({ slug, madrassaName, showToast }) {
   const [category, setCategory] = useState(CATEGORY_ALL);
   const [gender, setGender] = useState("all");
   const [exporting, setExporting] = useState(false);
+  const [page, setPage] = useState(1);
+  const pageSize = 500;
+
+  useEffect(() => setPage(1), [category, gender]);
 
   const params = new URLSearchParams();
   if (category !== CATEGORY_ALL) params.set("category", category);
   if (gender !== "all") params.set("gender", gender);
+  params.set("page", String(page));
+  params.set("page_size", String(pageSize));
 
   const query = params.toString();
   const { data, loading, error } = usePublicResource(
     `/public/${slug}/leaderboard/students/${query ? `?${query}` : ""}`,
   );
+
   const rows = useMemo(() => {
-    const list = Array.isArray(data) ? data : [];
+    const list = Array.isArray(data) ? data : (data?.results ?? []);
     return list.map(normalizeStudentRow);
   }, [data]);
+
+  const count = Array.isArray(data)
+    ? rows.length
+    : (data?.count ?? rows.length);
+  const totalPages = Math.max(1, Math.ceil(count / pageSize));
 
   const categoryLabel =
     category === CATEGORY_ALL
@@ -643,6 +655,30 @@ function StudentStandings({ slug, madrassaName, showToast }) {
           ))}
         />
       </div>
+
+      {!loading && count > pageSize && (
+        <div className="flex items-center justify-between text-xs font-semibold text-neutral-500 dark:text-neutral-400">
+          <span>
+            Page {page} of {totalPages}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className={`rounded-lg border border-neutral-300 px-3 py-1.5 transition-all duration-200 hover:border-[#21F1A8] hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:hover:bg-white/5 ${focusRing}`}
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className={`rounded-lg border border-neutral-300 px-3 py-1.5 transition-all duration-200 hover:border-[#21F1A8] hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:hover:bg-white/5 ${focusRing}`}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
