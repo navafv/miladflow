@@ -11,9 +11,15 @@ const HAPPENING_PAGE_SIZE = 6;
 const RESULTS_PAGE_SIZE = 2;
 
 const PLACE_COLORS = {
-  1: "#21F1A8",
-  2: "#38bdf8",
-  3: "#fbbf24",
+  1: "#FFC542",
+  2: "#B8C4D9",
+  3: "#E8A26B",
+};
+
+const PLACE_GLOW = {
+  1: "rgba(255, 197, 66, 0.45)",
+  2: "rgba(184, 196, 217, 0.4)",
+  3: "rgba(232, 162, 107, 0.4)",
 };
 
 const PLACE_LABELS = {
@@ -585,7 +591,7 @@ function HappeningNow({ events, pageIndex, pageCount }) {
 }
 
 /* ---------------------------------------------------------------------- */
-/* Slide 3 — Latest results (redesigned: podium layout)                   */
+/* Slide 3 — Latest results (redesigned: 2-per-page medal podium)         */
 /* ---------------------------------------------------------------------- */
 
 function TrophyIcon({ className }) {
@@ -594,21 +600,42 @@ function TrophyIcon({ className }) {
       <path
         d="M8 4h8v3.2a4 4 0 0 1-4 4 4 4 0 0 1-4-4V4Z"
         stroke="currentColor"
-        strokeWidth="1.6"
+        strokeWidth="1.7"
         strokeLinejoin="round"
       />
       <path
         d="M8 5H5.5A1.5 1.5 0 0 0 4 6.5v.75A3.75 3.75 0 0 0 7.75 11H8M16 5h2.5A1.5 1.5 0 0 1 20 6.5v.75A3.75 3.75 0 0 1 16.25 11H16"
         stroke="currentColor"
-        strokeWidth="1.6"
+        strokeWidth="1.7"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <path
         d="M12 11.2V15m0 0c-1.8 0-2.6 1-2.8 2.6M12 15c1.8 0 2.6 1 2.8 2.6M7.5 20h9"
         stroke="currentColor"
-        strokeWidth="1.6"
+        strokeWidth="1.7"
         strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function MedalIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M7 3h10l-3.2 6.4L17 15l-5-2.8L7 15l3.2-5.6L7 3Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="15.5" r="5" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="m9.7 15.3 1.6 1.6 3-3.1"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );
@@ -617,21 +644,21 @@ function TrophyIcon({ className }) {
 function PodiumNames({ entries, emphasis }) {
   if (!entries || entries.length === 0) {
     return (
-      <p className="text-[clamp(0.85rem,1vw,1.4rem)] font-semibold text-slate-400 dark:text-slate-500">
+      <p className="text-[clamp(0.85rem,1vw,1.35rem)] font-semibold text-slate-300 dark:text-slate-600">
         —
       </p>
     );
   }
   return (
-    <div className="flex flex-col items-center gap-1.5">
+    <div className="flex flex-col items-center gap-2">
       {entries.map((entry, idx) => (
         <div key={entry.id || idx} className="flex flex-col items-center">
           <div className="flex items-center gap-1.5">
             <p
               className={`line-clamp-2 text-balance text-center font-extrabold leading-tight text-slate-900 dark:text-white ${
                 emphasis
-                  ? "text-[clamp(1.1rem,1.9vw,2.4rem)]"
-                  : "text-[clamp(0.9rem,1.4vw,1.9rem)]"
+                  ? "text-[clamp(1.2rem,2.1vw,2.6rem)]"
+                  : "text-[clamp(0.95rem,1.5vw,2rem)]"
               }`}
             >
               {entry.name}
@@ -643,7 +670,7 @@ function PodiumNames({ entries, emphasis }) {
             )}
           </div>
           {entry.team && (
-            <p className="line-clamp-1 text-[clamp(0.7rem,0.95vw,1.25rem)] font-bold text-slate-500 dark:text-slate-400">
+            <p className="line-clamp-1 text-[clamp(0.72rem,1vw,1.3rem)] font-bold text-slate-500 dark:text-slate-400">
               {entry.team}
             </p>
           )}
@@ -655,49 +682,59 @@ function PodiumNames({ entries, emphasis }) {
 
 function PodiumColumn({ place, entries }) {
   const color = PLACE_COLORS[place];
+  const glow = PLACE_GLOW[place];
   const isFirst = place === 1;
   const heightClass = isFirst
-    ? "min-h-[7.5rem] sm:min-h-[9rem] lg:min-h-[11rem]"
+    ? "min-h-[8.5rem] sm:min-h-[10.5rem] lg:min-h-[13rem]"
     : place === 2
-      ? "min-h-[5.5rem] sm:min-h-[6.5rem] lg:min-h-[8rem]"
-      : "min-h-[4.25rem] sm:min-h-[5rem] lg:min-h-[6.25rem]";
+      ? "min-h-[6.25rem] sm:min-h-[7.5rem] lg:min-h-[9.5rem]"
+      : "min-h-[4.75rem] sm:min-h-[5.75rem] lg:min-h-[7.25rem]";
   const hasEntries = entries && entries.length > 0;
 
   return (
-    <div className="flex flex-1 flex-col items-center gap-2 sm:gap-3">
+    <div
+      className={`flex flex-col items-center gap-2.5 sm:gap-3 ${isFirst ? "flex-[1.15]" : "flex-1"}`}
+    >
       <div
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[clamp(0.7rem,0.95vw,1.15rem)] font-black sm:h-11 sm:w-11 lg:h-14 lg:w-14"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-[clamp(0.72rem,1vw,1.2rem)] font-black sm:h-12 sm:w-12 lg:h-16 lg:w-16"
         style={{
-          color,
-          backgroundColor: `${color}1a`,
-          boxShadow: hasEntries ? `0 0 16px 0 ${color}55` : undefined,
+          color: hasEntries ? "#1a1408" : "#94a3b8",
+          background: hasEntries
+            ? `linear-gradient(155deg, ${color}, ${color}bb)`
+            : "rgba(148,163,184,0.1)",
+          boxShadow: hasEntries ? `0 6px 20px -4px ${glow}` : undefined,
         }}
       >
         {isFirst ? (
-          <TrophyIcon className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6" />
+          <TrophyIcon className="h-5 w-5 sm:h-6 sm:w-6 lg:h-7 lg:w-7" />
         ) : (
-          PLACE_LABELS[place]
+          <MedalIcon className="h-4.5 w-4.5 sm:h-5 sm:w-5 lg:h-6 lg:w-6" />
         )}
       </div>
 
-      <div className="flex min-h-[3.5rem] items-center px-1">
+      <div className="flex min-h-[4rem] items-center px-1 sm:min-h-[4.5rem]">
         <PodiumNames entries={entries} emphasis={isFirst} />
       </div>
 
       <div
-        className={`flex w-full items-start justify-center rounded-t-xl border-t-4 pt-1.5 sm:rounded-t-2xl sm:pt-2 ${heightClass}`}
+        className={`relative flex w-full items-start justify-center overflow-hidden rounded-t-2xl pt-2 sm:rounded-t-[1.25rem] sm:pt-3 ${heightClass}`}
         style={{
-          borderColor: color,
           background: hasEntries
-            ? `linear-gradient(180deg, ${color}22, ${color}05)`
-            : "rgba(148,163,184,0.06)",
+            ? `linear-gradient(180deg, ${color}2e, ${color}08)`
+            : "rgba(148,163,184,0.05)",
+          boxShadow: hasEntries
+            ? `inset 0 2px 0 0 ${color}`
+            : "inset 0 2px 0 0 rgba(148,163,184,0.25)",
         }}
       >
         <span
-          className="text-[clamp(1.5rem,2.6vw,3.25rem)] font-black leading-none opacity-90"
-          style={{ color: hasEntries ? color : "#94a3b8" }}
+          className="rounded-full px-3 py-1 text-[clamp(0.6rem,0.8vw,0.95rem)] font-black uppercase tracking-widest"
+          style={{
+            color: hasEntries ? color : "#94a3b8",
+            backgroundColor: hasEntries ? "rgba(0,0,0,0.18)" : "transparent",
+          }}
         >
-          {place}
+          {PLACE_LABELS[place]}
         </span>
       </div>
     </div>
@@ -706,28 +743,34 @@ function PodiumColumn({ place, entries }) {
 
 function ResultEventCard({ group }) {
   return (
-    <div className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#1a1a1a] sm:rounded-3xl">
-      <div className="flex flex-col items-center gap-2 border-b border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-4 text-center dark:border-white/5 dark:from-[#111] dark:to-[#1a1a1a] sm:gap-3 sm:px-6 sm:py-6">
-        <h4 className="line-clamp-2 text-balance text-[clamp(1.15rem,2vw,2.5rem)] font-black uppercase tracking-tight text-slate-900 dark:text-white">
+    <div className="relative flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg dark:border-white/10 dark:bg-[#161616] sm:rounded-[1.75rem]">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-24 left-1/2 h-56 w-[36rem] -translate-x-1/2 rounded-full opacity-[0.14] blur-[80px]"
+        style={{ background: PLACE_COLORS[1] }}
+      />
+
+      <div className="relative z-10 flex flex-col items-center gap-2.5 border-b border-slate-200/70 bg-gradient-to-b from-slate-50/80 to-transparent px-5 py-5 text-center dark:border-white/5 dark:from-white/[0.03] sm:gap-3 sm:px-8 sm:py-7">
+        <h4 className="line-clamp-2 text-balance text-[clamp(1.3rem,2.3vw,2.75rem)] font-black uppercase tracking-tight text-slate-900 dark:text-white">
           {group.eventName}
         </h4>
-        <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           {group.category && (
-            <span className="rounded-lg bg-[#21F1A8]/20 px-2.5 py-0.5 text-[clamp(0.6rem,0.8vw,1rem)] font-bold uppercase tracking-wider text-[#0d9e73] dark:bg-[#21F1A8]/10 dark:text-[#21F1A8] sm:px-3 sm:py-1">
+            <span className="rounded-full bg-[#21F1A8]/15 px-3 py-1 text-[clamp(0.62rem,0.85vw,1rem)] font-bold uppercase tracking-wider text-[#0d9e73] dark:bg-[#21F1A8]/10 dark:text-[#21F1A8]">
               {group.category}
             </span>
           )}
           {group.gender &&
             group.gender.toLowerCase() !== "mixed" &&
             group.gender.toLowerCase() !== "both" && (
-              <span className="rounded-lg bg-slate-200 px-2.5 py-0.5 text-[clamp(0.6rem,0.8vw,1rem)] font-bold uppercase tracking-wider text-slate-700 dark:bg-white/10 dark:text-slate-300 sm:px-3 sm:py-1">
+              <span className="rounded-full bg-slate-200 px-3 py-1 text-[clamp(0.62rem,0.85vw,1rem)] font-bold uppercase tracking-wider text-slate-700 dark:bg-white/10 dark:text-slate-300">
                 {genderLabel(group.gender)}
               </span>
             )}
         </div>
       </div>
 
-      <div className="flex flex-1 items-end justify-center gap-2 px-3 pb-4 pt-5 sm:gap-3 sm:px-5 sm:pb-6 sm:pt-7 lg:gap-4 lg:px-6">
+      <div className="relative z-10 flex flex-1 items-end justify-center gap-3 px-4 pb-6 pt-6 sm:gap-5 sm:px-8 sm:pb-8 sm:pt-8 lg:gap-6 lg:px-10">
         <PodiumColumn place={2} entries={group.entries[2]} />
         <PodiumColumn place={1} entries={group.entries[1]} />
         <PodiumColumn place={3} entries={group.entries[3]} />
@@ -746,7 +789,7 @@ function LatestResults({ groupedResults, pageIndex, pageCount }) {
     <SlideShell accentColor="#fbbf24" title="Latest Results">
       <div
         key={pageIndex}
-        className="tv-fade grid min-h-0 flex-1 auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3 lg:gap-6 2xl:gap-8"
+        className="tv-fade grid min-h-0 flex-1 auto-rows-fr grid-cols-1 place-content-center gap-5 sm:grid-cols-2 sm:gap-6 lg:gap-8"
       >
         {page.length === 0 && (
           <div className="col-span-full flex items-center justify-center text-[clamp(0.9rem,1.4vw,1.9rem)] text-slate-400 dark:text-slate-500">
@@ -757,11 +800,6 @@ function LatestResults({ groupedResults, pageIndex, pageCount }) {
         {page.map((g) => (
           <ResultEventCard key={g.eventId} group={g} />
         ))}
-
-        {page.length > 0 &&
-          Array.from({ length: RESULTS_PAGE_SIZE - page.length }).map(
-            (_, i) => <div key={`pad-${i}`} className="hidden xl:block" />,
-          )}
       </div>
 
       <PageDots count={pageCount} activeIndex={pageIndex} color="#fbbf24" />
