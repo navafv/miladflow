@@ -6,7 +6,6 @@ import PublicUnavailable from "./PublicUnavailable.jsx";
 const MASTER_ROTATE_MS = 12_000;
 const INNER_ROTATE_MS = 8_000;
 
-const TEAMS_PAGE_SIZE = 3;
 const HAPPENING_PAGE_SIZE = 6;
 const RESULTS_PAGE_SIZE = 2;
 
@@ -67,6 +66,14 @@ function useRotatingPages(items, pageSize, intervalMs = INNER_ROTATE_MS) {
   );
 
   return { page, pageIndex: safeIndex, pageCount };
+}
+
+// Picks how many team cards share a leaderboard slide so the last page is
+// never left with a single lonely card: 1-3 teams fit on one slide, 4 teams
+// split 2+2, 5 teams split 3+2, 6 splits 3+3, 7 splits 2+2+3, etc.
+function computeTeamsPageSize(total) {
+  if (total <= 3) return Math.max(total, 1);
+  return total % 3 === 1 ? 2 : 3;
 }
 
 function normalizeTeam(row) {
@@ -379,40 +386,40 @@ function TeamClashCard({ team, maxPoints, rank }) {
 
       <div className="relative z-10 flex items-center justify-between">
         <span
-          className="rounded-full px-3 py-1 text-[clamp(0.65rem,0.85vw,1.15rem)] font-bold uppercase tracking-widest"
-          style={{ color, backgroundColor: `${color}1a` }}
+          className="rounded-full px-3.5 py-1.5 text-[clamp(0.8rem,1vw,1.4rem)] font-black uppercase tracking-widest sm:px-4"
+          style={{ color, backgroundColor: `${color}22` }}
         >
           {isLeading ? "Leading" : `#${rank + 1}`}
         </span>
         <span
-          className="h-3.5 w-3.5 rounded-full sm:h-4 sm:w-4 lg:h-5 lg:w-5"
+          className="h-4 w-4 rounded-full sm:h-5 sm:w-5 lg:h-6 lg:w-6"
           style={{ backgroundColor: color, boxShadow: `0 0 15px 3px ${color}` }}
         />
       </div>
 
-      <div className="mb-auto mt-auto flex flex-col gap-2 py-2">
-        <h2 className="relative z-10 line-clamp-2 text-balance text-center text-[clamp(1.35rem,2.6vw,3.25rem)] font-extrabold text-slate-900 dark:text-white">
+      <div className="mb-auto mt-auto flex flex-col gap-2.5 py-2 sm:gap-3">
+        <h2 className="relative z-10 line-clamp-2 text-balance text-center text-[clamp(1.7rem,3.2vw,4rem)] font-extrabold leading-tight text-slate-900 dark:text-white">
           {team.name}
         </h2>
         <div className="relative z-10 mt-1 flex items-baseline justify-center gap-2 sm:gap-3">
           <span
-            className="text-[clamp(2.75rem,7vw,9rem)] font-black leading-none tracking-tighter"
+            className="text-[clamp(3.5rem,9vw,11.5rem)] font-black leading-none tracking-tighter"
             style={{ color }}
           >
             {team.points}
           </span>
-          <span className="text-[clamp(0.9rem,1.4vw,2rem)] font-semibold text-slate-500 dark:text-slate-400">
+          <span className="text-[clamp(1.1rem,1.7vw,2.4rem)] font-bold text-slate-500 dark:text-slate-400">
             pts
           </span>
         </div>
 
-        <div className="relative z-10 mt-2 flex items-center justify-center gap-3 text-[clamp(0.7rem,1vw,1.25rem)] font-bold text-slate-500 dark:text-slate-400 sm:mt-3 sm:gap-4">
-          <span className="flex items-center gap-1.5 sm:gap-2">
-            <div className="h-2 w-2 rounded-full bg-[#38bdf8] sm:h-2.5 sm:w-2.5" />
+        <div className="relative z-10 mt-2 flex items-center justify-center gap-4 text-[clamp(0.95rem,1.3vw,1.6rem)] font-bold text-slate-600 dark:text-slate-300 sm:mt-4 sm:gap-6">
+          <span className="flex items-center gap-2">
+            <div className="h-2.5 w-2.5 rounded-full bg-[#38bdf8] sm:h-3 sm:w-3" />
             Boys: {team.boysPoints}
           </span>
-          <span className="flex items-center gap-1.5 sm:gap-2">
-            <div className="h-2 w-2 rounded-full bg-[#fbbf24] sm:h-2.5 sm:w-2.5" />
+          <span className="flex items-center gap-2">
+            <div className="h-2.5 w-2.5 rounded-full bg-[#fbbf24] sm:h-3 sm:w-3" />
             Girls: {team.girlsPoints}
           </span>
         </div>
@@ -439,11 +446,23 @@ function EpicLeaderboard({
   pageCount,
   ongoingEvents,
 }) {
+  // Cards scale up when a slide holds fewer teams so the numbers stay large
+  // and readable instead of being squeezed into unused grid columns.
+  const count = pagedTeams.length;
+  const gridColsClass =
+    count <= 1
+      ? "grid-cols-1"
+      : count === 2
+        ? "grid-cols-1 sm:grid-cols-2"
+        : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
+
   return (
     <div className="tv-slide flex h-full w-full flex-col">
       <OngoingBanner ongoingEvents={ongoingEvents} />
 
-      <div className="grid min-h-0 flex-1 w-full auto-rows-fr grid-cols-1 place-content-center gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6 2xl:gap-8">
+      <div
+        className={`grid min-h-0 flex-1 w-full auto-rows-fr place-content-center gap-4 sm:gap-5 lg:gap-6 2xl:gap-8 ${gridColsClass}`}
+      >
         {pagedTeams.map((team) => (
           <TeamClashCard
             key={team.id}
@@ -858,16 +877,28 @@ export default function LiveTvDashboard() {
   const SLIDE_LEADERBOARD = 0;
   const SLIDE_SCHEDULE = 1;
   const SLIDE_RESULTS = 2;
-  const SLIDES = [SLIDE_LEADERBOARD, SLIDE_SCHEDULE, SLIDE_RESULTS];
+
+  const hasSchedule = events.length > 0;
+
+  // Only include the schedule slide in rotation when there's something to show today.
+  const activeSlides = useMemo(
+    () => [
+      SLIDE_LEADERBOARD,
+      ...(hasSchedule ? [SLIDE_SCHEDULE] : []),
+      SLIDE_RESULTS,
+    ],
+    [hasSchedule],
+  );
 
   const [slideState, setSlideState] = useState({
     slide: SLIDE_LEADERBOARD,
     page: 0,
   });
 
+  const teamsPageSize = computeTeamsPageSize(rankedTeams.length);
   const leaderboardPageCount = Math.max(
     1,
-    Math.ceil(rankedTeams.length / TEAMS_PAGE_SIZE),
+    Math.ceil(rankedTeams.length / teamsPageSize),
   );
   const schedulePageCount = Math.max(
     1,
@@ -878,63 +909,87 @@ export default function LiveTvDashboard() {
     Math.ceil(groupedResults.length / RESULTS_PAGE_SIZE),
   );
 
+  // If the schedule slide disappears (e.g. events load in as empty) while it's
+  // being shown, jump straight off it instead of waiting out its timer.
+  useEffect(() => {
+    if (!hasSchedule && slideState.slide === SLIDE_SCHEDULE) {
+      setSlideState({ slide: SLIDE_RESULTS, page: 0 });
+    }
+  }, [hasSchedule, slideState.slide]);
+
   useEffect(() => {
     let timeoutId;
     const { slide, page } = slideState;
 
-    if (slide === SLIDE_LEADERBOARD && page >= leaderboardPageCount) {
-      setSlideState({ slide: SLIDE_SCHEDULE, page: 0 });
-      return;
-    }
-    if (slide === SLIDE_SCHEDULE && page >= schedulePageCount) {
-      setSlideState({ slide: SLIDE_RESULTS, page: 0 });
-      return;
-    }
-    if (slide === SLIDE_RESULTS && page >= resultsPageCount) {
+    if (!activeSlides.includes(slide)) {
       setSlideState({ slide: SLIDE_LEADERBOARD, page: 0 });
-      return;
+      return undefined;
     }
 
+    const goToNextSlide = () => {
+      const idx = activeSlides.indexOf(slide);
+      const next = activeSlides[(idx + 1) % activeSlides.length];
+      setSlideState({ slide: next, page: 0 });
+    };
+
     if (slide === SLIDE_LEADERBOARD) {
+      if (page >= leaderboardPageCount) {
+        goToNextSlide();
+        return undefined;
+      }
       timeoutId = setTimeout(() => {
         if (page + 1 < leaderboardPageCount) {
           setSlideState({ slide: SLIDE_LEADERBOARD, page: page + 1 });
         } else {
-          setSlideState({ slide: SLIDE_SCHEDULE, page: 0 });
+          goToNextSlide();
         }
       }, MASTER_ROTATE_MS);
     } else if (slide === SLIDE_SCHEDULE) {
+      if (page >= schedulePageCount) {
+        goToNextSlide();
+        return undefined;
+      }
       timeoutId = setTimeout(() => {
         if (page + 1 < schedulePageCount) {
           setSlideState({ slide: SLIDE_SCHEDULE, page: page + 1 });
         } else {
-          setSlideState({ slide: SLIDE_RESULTS, page: 0 });
+          goToNextSlide();
         }
       }, INNER_ROTATE_MS);
     } else if (slide === SLIDE_RESULTS) {
+      if (page >= resultsPageCount) {
+        goToNextSlide();
+        return undefined;
+      }
       timeoutId = setTimeout(() => {
         if (page + 1 < resultsPageCount) {
           setSlideState({ slide: SLIDE_RESULTS, page: page + 1 });
         } else {
-          setSlideState({ slide: SLIDE_LEADERBOARD, page: 0 });
+          goToNextSlide();
         }
       }, INNER_ROTATE_MS);
     }
 
     return () => clearTimeout(timeoutId);
-  }, [slideState, leaderboardPageCount, schedulePageCount, resultsPageCount]);
+  }, [
+    slideState,
+    activeSlides,
+    leaderboardPageCount,
+    schedulePageCount,
+    resultsPageCount,
+  ]);
 
   const pagedTeams = useMemo(() => {
     return rankedTeams
       .slice(
-        slideState.page * TEAMS_PAGE_SIZE,
-        slideState.page * TEAMS_PAGE_SIZE + TEAMS_PAGE_SIZE,
+        slideState.page * teamsPageSize,
+        slideState.page * teamsPageSize + teamsPageSize,
       )
       .map((t, idx) => ({
         ...t,
-        actualRank: slideState.page * TEAMS_PAGE_SIZE + idx,
+        actualRank: slideState.page * teamsPageSize + idx,
       }));
-  }, [rankedTeams, slideState.page]);
+  }, [rankedTeams, slideState.page, teamsPageSize]);
 
   const maxPoints = rankedTeams[0]?.points ?? 0;
 
@@ -1001,14 +1056,14 @@ export default function LiveTvDashboard() {
       </main>
 
       <div className="absolute bottom-0 left-0 flex w-full items-center justify-center gap-2.5 pb-3 sm:gap-3 sm:pb-4">
-        {SLIDES.map((_, i) => (
+        {activeSlides.map((s) => (
           <div
-            key={i}
+            key={s}
             className="h-1.5 rounded-full transition-all duration-700"
             style={{
-              width: i === slideState.slide ? "4rem" : "1.5rem",
+              width: s === slideState.slide ? "4rem" : "1.5rem",
               backgroundColor:
-                i === slideState.slide ? "#21F1A8" : "rgba(148,163,184,0.3)",
+                s === slideState.slide ? "#21F1A8" : "rgba(148,163,184,0.3)",
             }}
           />
         ))}
