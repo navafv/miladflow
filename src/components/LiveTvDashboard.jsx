@@ -8,7 +8,7 @@ const INNER_ROTATE_MS = 8_000;
 
 const TEAMS_PAGE_SIZE = 3;
 const HAPPENING_PAGE_SIZE = 6;
-const RESULTS_PAGE_SIZE = 3;
+const RESULTS_PAGE_SIZE = 2;
 
 const PLACE_COLORS = {
   1: "#21F1A8",
