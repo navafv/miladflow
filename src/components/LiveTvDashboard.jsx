@@ -686,11 +686,11 @@ function PodiumNames({ entries, emphasis }) {
             >
               {entry.name}
             </p>
-            {entry.isGroup && entry.groupName && (
+            {/* {entry.isGroup && entry.groupName && (
               <span className="hidden shrink-0 rounded-md bg-slate-900/5 px-1.5 py-0.5 text-[0.6rem] font-black uppercase tracking-widest text-slate-500 dark:bg-white/10 dark:text-slate-400 sm:inline-block">
                 Group
               </span>
-            )}
+            )} */}
           </div>
           {entry.team && (
             <p className="line-clamp-1 text-[clamp(0.72rem,1vw,1.3rem)] font-bold text-slate-500 dark:text-slate-400">
