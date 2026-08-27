@@ -302,43 +302,52 @@ const StudentPoster = forwardRef(function StudentPoster(
             No placements recorded yet
           </div>
         ) : (
-          <div className="flex flex-col gap-3 py-1">
-            {sortedWins.slice(0, 5).map((w) => {
+          <div
+            className={
+              sortedWins.length > 5
+                ? "grid grid-cols-2 gap-x-3 gap-y-2.5 py-1"
+                : "flex flex-col gap-3 py-1"
+            }
+          >
+            {sortedWins.map((w) => {
               const badge = PLACE_BADGE[w.place];
+              const compact = sortedWins.length > 5;
               return (
                 <div
                   key={
                     w.placementId ?? `${w.eventId ?? w.eventName}-${w.place}`
                   }
-                  className={`flex flex-nowrap items-center gap-3 rounded-r-lg py-3 pl-3.5 pr-3 ${badge.rowClass}`}
+                  className={`flex min-w-0 flex-nowrap items-center gap-2 rounded-r-lg pr-2 ${
+                    compact ? "gap-1.5 py-2 pl-2.5" : "gap-3 py-3 pl-3.5 pr-3"
+                  } ${badge.rowClass}`}
                 >
                   <span
-                    className={`flex-shrink-0 text-[15px] font-black italic ${badge.numeralClass}`}
+                    className={`flex-shrink-0 font-black italic ${
+                      compact ? "text-[12px]" : "text-[15px]"
+                    } ${badge.numeralClass}`}
                     style={{ fontFamily: '"Cormorant Garamond", serif' }}
                   >
                     {badge.numeral}
                   </span>
                   <span
-                    className={`min-w-0 flex-1 truncate text-[13px] font-bold ${badge.nameClass}`}
+                    className={`min-w-0 flex-1 truncate font-bold ${
+                      compact ? "text-[11.5px]" : "text-[13px]"
+                    } ${badge.nameClass}`}
                   >
                     {w.eventName || "Untitled Event"}
                   </span>
                   <span
-                    className={`flex-shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${badge.className}`}
+                    className={`flex-shrink-0 whitespace-nowrap rounded-full font-black uppercase tracking-wider ${
+                      compact
+                        ? "px-1.5 py-0.5 text-[8px]"
+                        : "px-2.5 py-1 text-[10px]"
+                    } ${badge.className}`}
                   >
-                    {badge.label}
+                    {compact ? `#${w.place}` : badge.label}
                   </span>
                 </div>
               );
             })}
-
-            {sortedWins.length > 5 && (
-              <div
-                className={`text-center text-[10px] font-bold uppercase tracking-widest ${t.textFaint}`}
-              >
-                + {sortedWins.length - 5} More Placements
-              </div>
-            )}
           </div>
         )}
       </div>
