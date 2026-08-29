@@ -308,6 +308,34 @@ export default function StudentsPage() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 500);
 
+  const [sortConfig, setSortConfig] = useState({
+    key: "name",
+    direction: "asc",
+  });
+
+  const handleSort = (key) => {
+    let direction = "asc";
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const renderSortIcon = (key) => {
+    if (sortConfig.key !== key) {
+      return (
+        <span className="ml-1 opacity-0 transition-opacity group-hover:opacity-100 text-slate-400">
+          ↕
+        </span>
+      );
+    }
+    return (
+      <span className="ml-1 text-[#21F1A8]">
+        {sortConfig.direction === "asc" ? "↑" : "↓"}
+      </span>
+    );
+  };
+
   const {
     data: allStudents,
     loading,
@@ -320,7 +348,7 @@ export default function StudentsPage() {
   } = useApiResource("/students/", { search: debouncedSearch });
 
   const students = useMemo(() => {
-    return allStudents.filter((s) => {
+    const filtered = allStudents.filter((s) => {
       if (filters.team !== ALL && String(s.team?.id) !== String(filters.team))
         return false;
       if (
@@ -335,7 +363,33 @@ export default function StudentsPage() {
         return false;
       return true;
     });
-  }, [allStudents, filters]);
+
+    return filtered.sort((a, b) => {
+      let aValue = a[sortConfig.key];
+      let bValue = b[sortConfig.key];
+
+      if (sortConfig.key === "team") {
+        aValue = a.team?.name;
+        bValue = b.team?.name;
+      } else if (sortConfig.key === "category") {
+        aValue = a.category?.name;
+        bValue = b.category?.name;
+      }
+
+      aValue = aValue ?? "";
+      bValue = bValue ?? "";
+
+      if (typeof aValue === "string" && typeof bValue === "string") {
+        return sortConfig.direction === "asc"
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      }
+
+      if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [allStudents, filters, sortConfig]);
 
   const hasLoadedOnceRef = useRef(false);
   useEffect(() => {
@@ -615,14 +669,33 @@ export default function StudentsPage() {
         />
       ) : (
         <>
-          <div className="mb-3">
+          <div className="mb-3 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
             <SearchInput
               value={search}
               onChange={setSearch}
               placeholder="Search by name or reg. no…"
               aria-label="Search students"
-              className="sm:max-w-xs"
+              className="w-full sm:w-auto sm:max-w-xs"
             />
+
+            <div className="flex w-full items-center gap-2 sm:hidden">
+              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                Sort:
+              </span>
+              <Select
+                value={`${sortConfig.key}-${sortConfig.direction}`}
+                onChange={(e) => {
+                  const [key, direction] = e.target.value.split("-");
+                  setSortConfig({ key, direction });
+                }}
+              >
+                <option value="name-asc">Name (A-Z)</option>
+                <option value="name-desc">Name (Z-A)</option>
+                <option value="reg_no-asc">Reg No. (Ascending)</option>
+                <option value="team-asc">Team (A-Z)</option>
+                <option value="category-asc">Category (A-Z)</option>
+              </Select>
+            </div>
           </div>
 
           <StudentFilterBar
@@ -680,12 +753,54 @@ export default function StudentsPage() {
                     className="h-3.5 w-3.5 rounded border-slate-300 text-[#21F1A8] focus:ring-[#21F1A8]"
                   />
                 </Th>
-                <Th>Student</Th>
-                <Th>Reg No.</Th>
-                <Th>Class</Th>
-                <Th>Team</Th>
-                <Th>Category</Th>
-                <Th>Gender</Th>
+                <Th>
+                  <button
+                    onClick={() => handleSort("name")}
+                    className="group flex items-center hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none"
+                  >
+                    Student {renderSortIcon("name")}
+                  </button>
+                </Th>
+                <Th>
+                  <button
+                    onClick={() => handleSort("reg_no")}
+                    className="group flex items-center hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none"
+                  >
+                    Reg No. {renderSortIcon("reg_no")}
+                  </button>
+                </Th>
+                <Th>
+                  <button
+                    onClick={() => handleSort("class_name")}
+                    className="group flex items-center hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none"
+                  >
+                    Class {renderSortIcon("class_name")}
+                  </button>
+                </Th>
+                <Th>
+                  <button
+                    onClick={() => handleSort("team")}
+                    className="group flex items-center hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none"
+                  >
+                    Team {renderSortIcon("team")}
+                  </button>
+                </Th>
+                <Th>
+                  <button
+                    onClick={() => handleSort("category")}
+                    className="group flex items-center hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none"
+                  >
+                    Category {renderSortIcon("category")}
+                  </button>
+                </Th>
+                <Th>
+                  <button
+                    onClick={() => handleSort("gender")}
+                    className="group flex items-center hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none"
+                  >
+                    Gender {renderSortIcon("gender")}
+                  </button>
+                </Th>
                 <Th>Poster</Th>
                 <Th>Actions</Th>
               </tr>
