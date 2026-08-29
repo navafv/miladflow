@@ -504,7 +504,6 @@ export default function ResultsPage() {
         <h2 className="font-display text-2xl font-semibold text-slate-900 dark:text-white">
           Team points
         </h2>
-        {/*
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Award (or deduct) points to a team at the committee's discretion — a
           note is required for deductions.
@@ -565,7 +564,6 @@ export default function ResultsPage() {
             </button>
           </div>
         </form>
-        */}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           {leaderboardLoading && (
