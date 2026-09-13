@@ -34,8 +34,20 @@ const EVENT_LINE_HEIGHT = EVENT_FONT_SIZE * 1.18;
 const JUDGE_BLOCK_H = 21;
 const HEAD_FONT_SIZE = 11;
 const LINE_HEIGHT_FACTOR = 1.18;
-const TABLE_HEAD_HEIGHT_APPROX =
-  HEAD_FONT_SIZE * LINE_HEIGHT_FACTOR + CELL_PADDING * 2;
+const HEAD_LABELS = ["Sl No", "Student / Team", "Code", "Score", "Remarks"];
+
+function computeTableHeadHeight(doc, colWidths) {
+  doc.setFont(PDF_FONT_NAME, "bold");
+  doc.setFontSize(HEAD_FONT_SIZE);
+  let maxLines = 1;
+  HEAD_LABELS.forEach((label, i) => {
+    const textSpace = colWidths[i] - CELL_PADDING * 2;
+    const lines = doc.splitTextToSize(label, textSpace);
+    if (lines.length > maxLines) maxLines = lines.length;
+  });
+  return maxLines * (HEAD_FONT_SIZE * LINE_HEIGHT_FACTOR) + CELL_PADDING * 2;
+}
+
 const FIT_SAFETY_MARGIN = 14;
 const YIELD_EVERY_N_ITEMS = 8;
 
