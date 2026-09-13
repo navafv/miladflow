@@ -31,6 +31,7 @@ const SUBTITLE_LINE_HEIGHT = SUBTITLE_FONT_SIZE * 1.18;
 const EVENT_FONT_SIZE = 16;
 const EVENT_LINE_HEIGHT = EVENT_FONT_SIZE * 1.18;
 
+const HEADER_TOP_OFFSET = 12;
 const JUDGE_BLOCK_H = 21;
 const HEAD_FONT_SIZE = 11;
 const LINE_HEIGHT_FACTOR = 1.18;
@@ -279,7 +280,7 @@ function chunkRowsToFit(eventRows, availableHeight) {
 }
 
 function measureHeaderHeight(doc, ev, width, orgName) {
-  let h = 0;
+  let h = HEADER_TOP_OFFSET;
 
   if (orgName) {
     const lines = measureWrap(doc, orgName, width, ORG_FONT_SIZE, true);
@@ -373,7 +374,7 @@ function drawGridSheet(
   chunkRows,
   { top, left, width, pageWidth, orgName, continuation = false },
 ) {
-  let y = top + 12;
+  let y = top + HEADER_TOP_OFFSET;
   const centerX = left + width / 2;
 
   if (continuation) {
