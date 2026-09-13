@@ -35,6 +35,8 @@ const JUDGE_BLOCK_H = 21;
 const HEAD_FONT_SIZE = 11;
 const LINE_HEIGHT_FACTOR = 1.18;
 const HEAD_LABELS = ["Sl No", "Student / Team", "Code", "Score", "Remarks"];
+const TABLE_HEAD_HEIGHT_APPROX =
+  HEAD_FONT_SIZE * LINE_HEIGHT_FACTOR + CELL_PADDING * 2;
 
 function computeTableHeadHeight(doc, colWidths) {
   doc.setFont(PDF_FONT_NAME, "bold");
