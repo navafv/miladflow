@@ -33,7 +33,9 @@ const EVENT_LINE_HEIGHT = EVENT_FONT_SIZE * 1.18;
 
 const JUDGE_BLOCK_H = 21;
 const HEAD_FONT_SIZE = 11;
-const TABLE_HEAD_HEIGHT_APPROX = HEAD_FONT_SIZE * 1.3 + CELL_PADDING * 2;
+const LINE_HEIGHT_FACTOR = 1.18;
+const TABLE_HEAD_HEIGHT_APPROX =
+  HEAD_FONT_SIZE * LINE_HEIGHT_FACTOR + CELL_PADDING * 2;
 const FIT_SAFETY_MARGIN = 14;
 const YIELD_EVERY_N_ITEMS = 8;
 
@@ -96,11 +98,6 @@ export async function generateJudgeSheetsPDF(
   for (let i = 0; i < sheets.length; i += 1) {
     const ev = sheets[i];
 
-    // "Continuous Print" (paper-saving) mode packs sheets back-to-back in
-    // the 3-per-page grid with no regard for category/gender/event
-    // boundaries (the default). With it off, force a fresh page whenever
-    // we move to a new category, gender, or event, matching the standard
-    // "one new page per group" print behavior.
     if (!continuousPrint && lastEvent && lastEvent !== ev && slot !== 0) {
       doc.addPage();
       slot = 0;
@@ -236,7 +233,8 @@ function buildEventRows(doc, ev, detailMaxWidth) {
   });
 }
 
-const SINGLE_LINE_ROW_H = DETAIL_FONT_SIZE * 1.3 + CELL_PADDING * 2;
+const SINGLE_LINE_ROW_H =
+  DETAIL_FONT_SIZE * LINE_HEIGHT_FACTOR + CELL_PADDING * 2;
 
 function rowHeightOf(r) {
   if (!r.isGroup) return SINGLE_LINE_ROW_H;
@@ -339,13 +337,20 @@ function didDrawGroupCell(doc, data, chunkRows) {
   });
 }
 
-function didParseGroupRowHeight(data, chunkRows) {
-  if (data.section !== "body" || data.column.index !== DETAIL_COL_INDEX) return;
-  const meta = chunkRows[data.row.index];
-  if (!meta || !meta.isGroup) return;
+function didParseExactRowHeight(data, chunkRows) {
+  if (data.section === "head") {
+    if (data.row.height < TABLE_HEAD_HEIGHT_APPROX) {
+      data.row.height = TABLE_HEAD_HEIGHT_APPROX;
+    }
+    return;
+  }
 
-  const needed = meta.totalLines * DETAIL_LINE_HEIGHT + CELL_PADDING * 2;
-  if (needed > data.row.height) data.row.height = needed;
+  if (data.section !== "body") return;
+  const meta = chunkRows[data.row.index];
+  if (!meta) return;
+
+  const needed = rowHeightOf(meta);
+  if (data.row.height < needed) data.row.height = needed;
 }
 
 function drawGridSheet(
@@ -436,6 +441,7 @@ function drawGridSheet(
       lineWidth: 0.5,
       overflow: "linebreak",
       valign: "top",
+      lineHeightFactor: LINE_HEIGHT_FACTOR,
     },
     headStyles: {
       fillColor: HEAD_BG,
@@ -443,10 +449,12 @@ function drawGridSheet(
       fontStyle: "bold",
       fontSize: HEAD_FONT_SIZE,
       cellPadding: CELL_PADDING,
+      minCellHeight: TABLE_HEAD_HEIGHT_APPROX,
     },
     bodyStyles: {
       fontSize: DETAIL_FONT_SIZE,
       cellPadding: CELL_PADDING,
+      minCellHeight: SINGLE_LINE_ROW_H,
     },
     columnStyles: {
       0: { cellWidth: width * 0.12 },
@@ -454,7 +462,7 @@ function drawGridSheet(
       2: { cellWidth: width * 0.16 },
       3: { cellWidth: width * 0.16 },
     },
-    didParseCell: (data) => didParseGroupRowHeight(data, chunkRows),
+    didParseCell: (data) => didParseExactRowHeight(data, chunkRows),
     didDrawCell: (data) => didDrawGroupCell(doc, data, chunkRows),
   });
 }

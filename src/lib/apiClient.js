@@ -87,11 +87,19 @@ async function refreshAccessToken() {
       throw new ApiError("No refresh token available", { status: 401 });
     }
 
-    const res = await fetch(`${BASE_URL}/auth/refresh/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh }),
-    });
+    let res;
+    try {
+      res = await fetch(`${BASE_URL}/auth/refresh/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh }),
+      });
+    } catch (err) {
+      throw new ApiError("Network error — please check your connection.", {
+        status: null,
+        data: err,
+      });
+    }
 
     if (!res.ok) {
       const errData = await safeJson(res);
@@ -116,6 +124,11 @@ async function refreshAccessToken() {
 
   try {
     return await refreshPromise;
+  } catch (err) {
+    clearTokens();
+    emitTokenChange();
+    emitForcedLogout();
+    throw err;
   } finally {
     refreshPromise = null;
   }
@@ -197,22 +210,13 @@ async function request(path, options = {}) {
   let res = await doFetch();
 
   if (res.status === 401 && !skipAuth && getRefreshToken()) {
-    let refreshError = null;
     try {
       await refreshAccessToken();
     } catch (err) {
-      refreshError = err;
-    }
-
-    if (refreshError) {
       emitToast("Session expired. Please log in again.", "error");
-      clearTokens();
-      emitTokenChange();
-      emitForcedLogout();
-
       throw new ApiError("Session expired. Please log in again.", {
         status: 401,
-        data: refreshError instanceof ApiError ? refreshError.data : null,
+        data: err instanceof ApiError ? err.data : null,
       });
     }
 

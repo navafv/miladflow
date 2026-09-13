@@ -90,7 +90,7 @@ export async function hydrate() {
     const me = await apiClient.get("/auth/me/");
     setState({ me, status: "ready" });
   } catch {
-    setState({ me: null, status: "error" });
+    setState({ me: null, status: "ready" });
   }
 }
 
